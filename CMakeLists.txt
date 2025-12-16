@@ -16,4 +16,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_subdirectory(common)
 
 # проект HelloWorld - стартовый проект для проверки коррктного подключения библиотек и фреймворков
-add_subdirectory(hello-world)
+#add_subdirectory(hello-world)
+
+# проект MVP - минимальный реально работающий проект торговой платформы
+add_subdirectory(mvp)
