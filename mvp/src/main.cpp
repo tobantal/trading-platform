@@ -29,7 +29,7 @@
 #include "ports/output/IOrderRepository.hpp"
 #include "ports/output/IStrategyRepository.hpp"
 #include "ports/output/IJwtProvider.hpp"
-#include "ports/output/ICache.hpp"
+#include "ports/output/ICachePort.hpp"
 #include "ports/output/IEventBus.hpp"
 
 // Common lib

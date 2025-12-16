@@ -94,7 +94,7 @@ open http://localhost:3001                # ✅ работает
   └─ IPortfolioService.hpp, IStrategyService.hpp, IAccountService.hpp
 □ Создать Output Ports:
   └─ IBrokerGateway.hpp, IUserRepository.hpp, IOrderRepository.hpp
-  └─ IStrategyRepository.hpp, IJwtProvider.hpp, ICache.hpp, IEventBus.hpp
+  └─ IStrategyRepository.hpp, IJwtProvider.hpp, ICachePort.hpp, IEventBus.hpp
 □ Добавить ThreadSafeMap.hpp (из курса "Паттерны")
 ```
 

@@ -16,9 +16,9 @@ namespace trading::ports::output {
  * - LruCacheAdapter (MVP) - обёртка над cpp-cache
  * - RedisAdapter (future) - Redis
  */
-class ICache {
+class ICachePort {
 public:
-    virtual ~ICache() = default;
+    virtual ~ICachePort() = default;
 
     /**
      * @brief Установить значение в кэш
