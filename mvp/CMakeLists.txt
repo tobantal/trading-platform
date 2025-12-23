@@ -1,3 +1,4 @@
+# ROOT CMakeLists.txt Trading Platform
 cmake_minimum_required(VERSION 3.16)
 project(trading-mvp VERSION 0.1.0 LANGUAGES CXX)
 
@@ -26,7 +27,7 @@ FetchContent_Declare(
 FetchContent_Declare(
     cpp-cache
     GIT_REPOSITORY https://github.com/tobantal/cpp-cache.git
-    GIT_TAG        v0.0.1
+    GIT_TAG        v1.0.4
 )
 
 FetchContent_MakeAvailable(cpp-http-server cpp-cache)
@@ -64,7 +65,7 @@ target_link_libraries(trading-mvp
     PRIVATE
         microservice-core
         microservice-boost
-        cpp_cache
+        cache
         commonlib
 )
 
@@ -117,7 +118,7 @@ if(BUILD_TESTS)
     PRIVATE
         microservice-core
         microservice-boost
-        cpp_cache
+        cache
         commonlib
         GTest::gtest_main
         GTest::gmock_main

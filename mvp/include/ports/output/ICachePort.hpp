@@ -13,7 +13,7 @@ namespace trading::ports::output {
  * Используется для кэширования котировок, результатов поиска и т.д.
  * 
  * Реализации:
- * - LruCacheAdapter (MVP) - обёртка над cpp-cache
+ * - LruCacheAdapter - обёртка над cpp-cache
  * - RedisAdapter (future) - Redis
  */
 class ICachePort {
