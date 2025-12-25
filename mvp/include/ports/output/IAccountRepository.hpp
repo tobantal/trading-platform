@@ -70,7 +70,7 @@ public:
      * @param userId UUID пользователя
      * @return Активный Account или nullopt
      */
-    virtual std::optional<domain::Account> findActiveByUserId(const std::string& userId) = 0;
+    virtual std::optional<trading::domain::Account> findActiveByUserId(const std::string& userId) = 0;
 };
 
 } // namespace trading::ports::output

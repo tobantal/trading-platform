@@ -106,7 +106,7 @@ open http://localhost:3001                # ✅ работает
 
 **Задачи:**
 ```
-□ FakeTinkoffAdapter (IBrokerGateway):
+[Done] FakeTinkoffAdapter (IBrokerGateway):
   └─ 5 инструментов (SBER, LKOH, GAZP, VTBR, YNDX)
   └─ getQuote() — базовая цена ± 5%
   └─ getPortfolio() — in-memory позиции
@@ -146,6 +146,8 @@ open http://localhost:3001                # ✅ работает
 ```
 
 **Deliverable:** Сервисы работают с БД.
+
+FIXME: по факту прощен этап, реализованы временно InMemory репозитории.
 
 ---
 

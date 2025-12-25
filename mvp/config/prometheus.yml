@@ -8,4 +8,3 @@ scrape_configs:
       - targets: ['backend:8080']
     metrics_path: '/metrics'
     scrape_interval: 5s
-
