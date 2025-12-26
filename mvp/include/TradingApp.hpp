@@ -66,6 +66,9 @@ protected:
      */
     void configureInjection() override;
 
+/**
+ * @brief Вывести баннер при старте приложения
+ */
 private:
     void printStartupBanner();
 };

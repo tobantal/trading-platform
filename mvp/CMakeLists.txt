@@ -85,7 +85,8 @@ if(BUILD_TESTS)
     
     # Тесты адаптеров
     file(GLOB_RECURSE TEST_SOURCES
-        "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/adapters/*.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/endpoints/*.cpp"
     )
     
     add_executable(mvp_tests ${TEST_SOURCES} ${MVP_SOURCES})
