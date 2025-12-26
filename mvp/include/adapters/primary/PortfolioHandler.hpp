@@ -72,6 +72,9 @@ private:
     std::shared_ptr<ports::input::IAuthService> authService_;
     std::shared_ptr<ports::input::IAccountService> accountService_;
 
+    /**
+     * @brief Обрабатывает запрос получения полного портфеля.
+     */
     void handleGetPortfolio(IRequest& req, IResponse& res, const std::string& accountId)
     {
         auto portfolio = portfolioService_->getPortfolio(accountId);
@@ -103,6 +106,9 @@ private:
         res.setBody(response.dump());
     }
 
+    /**
+     * @brief Обрабатывает запрос получения позиций портфеля.
+     */
     void handleGetPositions(IRequest& req, IResponse& res, const std::string& accountId)
     {
         // Получаем позиции через portfolio
@@ -118,6 +124,9 @@ private:
         res.setBody(response.dump());
     }
 
+    /**
+     * @brief Обрабатывает запрос получения доступных денежных средств.
+     */
     void handleGetCash(IRequest& req, IResponse& res, const std::string& accountId)
     {
         auto cash = portfolioService_->getAvailableCash(accountId);
@@ -131,6 +140,9 @@ private:
         res.setBody(response.dump());
     }
 
+    /**
+     * @brief Преобразует объект Money в JSON.
+     */
     nlohmann::json moneyToJson(const domain::Money& money)
     {
         nlohmann::json j;
@@ -139,6 +151,9 @@ private:
         return j;
     }
 
+    /**
+     * @brief Преобразует объект Position в JSON.
+     */
     nlohmann::json positionToJson(const domain::Position& pos)
     {
         nlohmann::json j;
@@ -153,6 +168,9 @@ private:
         return j;
     }
 
+    /**
+     * @brief Извлекает userId из заголовков Authorization.
+     */
     std::optional<std::string> extractUserId(IRequest& req)
     {
         auto headers = req.getHeaders();

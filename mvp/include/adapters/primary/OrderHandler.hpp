@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 #include <memory>
 #include <iostream>
+#include <map>
 
 namespace trading::adapters::primary {
 
@@ -54,16 +55,19 @@ public:
         }
 
         std::string method = req.getMethod();
-        std::string path = req.getPath();
+        std::string fullPath = req.getPath();
+        
+        // Извлекаем путь без query string для маршрутизации
+        std::string path = extractPath(fullPath);
         
         if (method == "POST" && path == "/api/v1/orders") {
             handleCreateOrder(req, res, account->id);
         } else if (method == "GET" && path == "/api/v1/orders") {
-            handleGetOrders(req, res, account->id);
+            handleGetOrders(res, account->id);
         } else if (method == "GET" && path.find("/api/v1/orders/") == 0) {
-            handleGetOrder(req, res, account->id);
+            handleGetOrder(res, account->id, path);
         } else if (method == "DELETE" && path.find("/api/v1/orders/") == 0) {
-            handleCancelOrder(req, res, account->id);
+            handleCancelOrder(res, account->id, path);
         } else {
             res.setStatus(404);
             res.setHeader("Content-Type", "application/json");
@@ -76,6 +80,21 @@ private:
     std::shared_ptr<ports::input::IAuthService> authService_;
     std::shared_ptr<ports::input::IAccountService> accountService_;
 
+    /**
+     * @brief Извлекает путь без query string
+     */
+    std::string extractPath(const std::string& fullPath)
+    {
+        size_t pos = fullPath.find('?');
+        if (pos != std::string::npos) {
+            return fullPath.substr(0, pos);
+        }
+        return fullPath;
+    }
+
+    /**
+     * @brief Обрабатывает запрос создания ордера.
+     */
     void handleCreateOrder(IRequest& req, IResponse& res, const std::string& accountId)
     {
         try {
@@ -140,7 +159,10 @@ private:
         }
     }
 
-    void handleGetOrders(IRequest& req, IResponse& res, const std::string& accountId)
+    /**
+     * @brief Обрабатывает запрос получения всех ордеров счёта.
+     */
+    void handleGetOrders(IResponse& res, const std::string& accountId)
     {
         auto orders = orderService_->getAllOrders(accountId);
 
@@ -154,9 +176,11 @@ private:
         res.setBody(response.dump());
     }
 
-    void handleGetOrder(IRequest& req, IResponse& res, const std::string& accountId)
+    /**
+     * @brief Обрабатывает запрос получения ордера по ID.
+     */
+    void handleGetOrder(IResponse& res, const std::string& accountId, const std::string& path)
     {
-        std::string path = req.getPath();
         std::string orderId = path.substr(std::string("/api/v1/orders/").length());
         
         auto order = orderService_->getOrderById(orderId);
@@ -172,9 +196,11 @@ private:
         res.setBody(orderToJson(*order).dump());
     }
 
-    void handleCancelOrder(IRequest& req, IResponse& res, const std::string& accountId)
+    /**
+     * @brief Обрабатывает запрос отмены ордера.
+     */
+    void handleCancelOrder(IResponse& res, const std::string& accountId, const std::string& path)
     {
-        std::string path = req.getPath();
         std::string orderId = path.substr(std::string("/api/v1/orders/").length());
         
         bool cancelled = orderService_->cancelOrder(accountId, orderId);
@@ -193,6 +219,9 @@ private:
         }
     }
 
+    /**
+     * @brief Преобразует объект Order в JSON.
+     */
     nlohmann::json orderToJson(const domain::Order& order)
     {
         nlohmann::json j;
@@ -210,6 +239,9 @@ private:
         return j;
     }
 
+    /**
+     * @brief Извлекает userId из заголовков Authorization.
+     */
     std::optional<std::string> extractUserId(IRequest& req)
     {
         auto headers = req.getHeaders();

@@ -42,6 +42,9 @@ public:
 private:
     std::shared_ptr<ports::input::IAuthService> authService_;
 
+    /**
+     * @brief Обрабатывает запрос логина.
+     */
     void handleLogin(IRequest& req, IResponse& res)
     {
         try {
@@ -78,6 +81,9 @@ private:
         }
     }
 
+    /**
+     * @brief Обрабатывает запрос валидации токена.
+     */
     void handleValidate(IRequest& req, IResponse& res)
     {
         try {

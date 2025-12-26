@@ -89,6 +89,9 @@ private:
     std::shared_ptr<ports::input::IAuthService> authService_;
     std::shared_ptr<ports::input::IAccountService> accountService_;
 
+    /**
+     * @brief Обрабатывает запрос создания стратегии.
+     */
     void handleCreateStrategy(IRequest& req, IResponse& res, const std::string& accountId)
     {
         try {
@@ -152,6 +155,9 @@ private:
         }
     }
 
+    /**
+     * @brief Обрабатывает запрос получения всех стратегий счёта.
+     */
     void handleGetStrategies(IRequest& req, IResponse& res, const std::string& accountId)
     {
         try {
@@ -174,6 +180,9 @@ private:
         }
     }
 
+    /**
+     * @brief Обрабатывает запрос получения стратегии по ID.
+     */
     void handleGetStrategy(IRequest& req, IResponse& res, const std::string& accountId, const std::string& strategyId)
     {
         try {
@@ -197,6 +206,9 @@ private:
         }
     }
 
+    /**
+     * @brief Обрабатывает запрос запуска стратегии.
+     */
     void handleStartStrategy(IRequest& req, IResponse& res, const std::string& accountId, const std::string& strategyId)
     {
         try {
@@ -231,6 +243,9 @@ private:
         }
     }
 
+    /**
+     * @brief Обрабатывает запрос остановки стратегии.
+     */
     void handleStopStrategy(IRequest& req, IResponse& res, const std::string& accountId, const std::string& strategyId)
     {
         try {
@@ -266,6 +281,9 @@ private:
         }
     }
 
+    /**
+     * @brief Обрабатывает запрос удаления стратегии.
+     */
     void handleDeleteStrategy(IRequest& req, IResponse& res, const std::string& accountId, const std::string& strategyId)
     {
         try {
@@ -299,6 +317,9 @@ private:
         }
     }
 
+    /**
+     * @brief Преобразует объект Strategy в JSON.
+     */
     nlohmann::json strategyToJson(const domain::Strategy& strategy)
     {
         nlohmann::json j;
@@ -325,6 +346,9 @@ private:
         return j;
     }
 
+    /**
+     * @brief Извлекает userId из заголовков Authorization.
+     */
     std::optional<std::string> extractUserId(IRequest& req)
     {
         auto headers = req.getHeaders();

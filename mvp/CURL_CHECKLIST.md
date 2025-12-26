@@ -8,7 +8,9 @@ docker-compose up -d
 ```
 
 # 2. Проверьте, что всё работает
-curl http://localhost:3001/api/v1/health
+```bash
+curl http://localhost:8080/api/v1/health
+```
 
 🔐 Авторизация
 Логин (создание пользователя)
@@ -26,7 +28,7 @@ curl -X POST http://localhost:3001/api/v1/auth/login \
  }
 ```
 
-Валидация токена
+# Валидация токена
 ```bash
 curl -X POST http://localhost:3001/api/v1/auth/validate \
   -H "Content-Type: application/json" \
@@ -41,38 +43,38 @@ curl -X POST http://localhost:3001/api/v1/auth/validate \
  }
 ```
 
-📊 Рыночные данные
+# 📊 Рыночные данные
 Получить все котировки
 ```bash
-curl "http://localhost:3001/api/v1/quotes"
+curl http://localhost:8080/api/v1/quotes
 ```
 
 # ИЛИ получить конкретные инструменты (правильный параметр `figis`):
 ```bash
-curl "http://localhost:3001/api/v1/quotes?figis=BBG004730N88,BBG004731032"
+curl http://localhost:8080/api/v1/quotes?figis=BBG004730N88,BBG004731032
 ```
 
 Поиск инструментов
 ```bash
-curl "http://localhost:3001/api/v1/instruments/search?query=SBER"
-curl "http://localhost:3001/api/v1/instruments/search?query=ЛУКОЙЛ"
+curl http://localhost:8080/api/v1/instruments/search?query=SBER
+curl http://localhost:8080/api/v1/instruments/search?query=ЛУКОЙЛ
 ```
 
 Получить все инструменты
 ```bash
-curl "http://localhost:3001/api/v1/instruments"
+curl http://localhost:8080/api/v1/instruments
 ```
 
 Получить информацию по конкретному FIGI
 ```bash
-curl "http://localhost:3001/api/v1/instruments/BBG004730N88"
+curl http://localhost:8080/api/v1/instruments/BBG004730N88
 ```
 
 💼 Ордера (требуется авторизация)
 Создать ордер
 ```bash
 # MARKET ордер (исполняется по текущей цене)
-curl -X POST http://localhost:3001/api/v1/orders \
+curl -X POST http://localhost:8080/api/v1/orders \
   -H "Authorization: Bearer ВАШ_JWT_ТОКЕН" \
   -H "Content-Type: application/json" \
   -d '{
@@ -83,7 +85,7 @@ curl -X POST http://localhost:3001/api/v1/orders \
   }'
 
 # LIMIT ордер (указать цену)
-curl -X POST http://localhost:3001/api/v1/orders \
+curl -X POST http://localhost:8080/api/v1/orders \
   -H "Authorization: Bearer ВАШ_JWT_ТОКЕН" \
   -H "Content-Type: application/json" \
   -d '{

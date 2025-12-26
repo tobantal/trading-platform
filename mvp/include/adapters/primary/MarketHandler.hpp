@@ -6,6 +6,7 @@
 #include <memory>
 #include <iostream>
 #include <sstream>
+#include <map>
 
 namespace trading::adapters::primary {
 
@@ -29,16 +30,29 @@ public:
 
     void handle(IRequest& req, IResponse& res) override
     {
-        std::string path = req.getPath();
+        std::string method = req.getMethod();
+        std::string fullPath = req.getPath();
+        
+        // Извлекаем путь без query string для маршрутизации
+        std::string path = extractPath(fullPath);
+        
+        // Все endpoints MarketHandler поддерживают только GET
+        if (method != "GET") {
+            res.setStatus(405);
+            res.setHeader("Content-Type", "application/json");
+            res.setHeader("Allow", "GET");
+            res.setBody(R"({"error": "Method not allowed"})");
+            return;
+        }
         
         if (path == "/api/v1/quotes") {
-            handleGetQuotes(req, res);
+            handleGetQuotes(fullPath, res);
         } else if (path == "/api/v1/instruments") {
-            handleGetInstruments(req, res);
+            handleGetInstruments(res);
         } else if (path == "/api/v1/instruments/search") {
-            handleSearchInstruments(req, res);
+            handleSearchInstruments(fullPath, res);
         } else if (path.find("/api/v1/instruments/") == 0) {
-            handleGetInstrumentByFigi(req, res);
+            handleGetInstrumentByFigi(res, path);
         } else {
             res.setStatus(404);
             res.setHeader("Content-Type", "application/json");
@@ -49,9 +63,52 @@ public:
 private:
     std::shared_ptr<ports::input::IMarketService> marketService_;
 
-    void handleGetQuotes(IRequest& req, IResponse& res)
+    /**
+     * @brief Извлекает путь без query string
+     */
+    std::string extractPath(const std::string& fullPath)
     {
-        auto params = req.getParams();
+        size_t pos = fullPath.find('?');
+        if (pos != std::string::npos) {
+            return fullPath.substr(0, pos);
+        }
+        return fullPath;
+    }
+
+    /**
+     * @brief Парсит query string параметры из URL
+     */
+    std::map<std::string, std::string> parseQueryParams(const std::string& fullPath)
+    {
+        std::map<std::string, std::string> params;
+        
+        size_t pos = fullPath.find('?');
+        if (pos == std::string::npos) {
+            return params;
+        }
+        
+        std::string queryString = fullPath.substr(pos + 1);
+        std::stringstream ss(queryString);
+        std::string pair;
+        
+        while (std::getline(ss, pair, '&')) {
+            size_t eqPos = pair.find('=');
+            if (eqPos != std::string::npos) {
+                std::string key = pair.substr(0, eqPos);
+                std::string value = pair.substr(eqPos + 1);
+                params[key] = value;
+            }
+        }
+        
+        return params;
+    }
+
+    /**
+     * @brief Обрабатывает запрос получения котировок.
+     */
+    void handleGetQuotes(const std::string& fullPath, IResponse& res)
+    {
+        auto params = parseQueryParams(fullPath);
         std::vector<std::string> figis;
         
         auto it = params.find("figis");
@@ -86,7 +143,10 @@ private:
         res.setBody(response.dump());
     }
 
-    void handleGetInstruments(IRequest& req, IResponse& res)
+    /**
+     * @brief Обрабатывает запрос получения всех инструментов.
+     */
+    void handleGetInstruments(IResponse& res)
     {
         auto instruments = marketService_->getAllInstruments();
 
@@ -100,9 +160,12 @@ private:
         res.setBody(response.dump());
     }
 
-    void handleSearchInstruments(IRequest& req, IResponse& res)
+    /**
+     * @brief Обрабатывает поиск инструментов по запросу.
+     */
+    void handleSearchInstruments(const std::string& fullPath, IResponse& res)
     {
-        auto params = req.getParams();
+        auto params = parseQueryParams(fullPath);
         std::string query;
         
         auto it = params.find("query");
@@ -129,9 +192,11 @@ private:
         res.setBody(response.dump());
     }
 
-    void handleGetInstrumentByFigi(IRequest& req, IResponse& res)
+    /**
+     * @brief Обрабатывает запрос получения инструмента по FIGI.
+     */
+    void handleGetInstrumentByFigi(IResponse& res, const std::string& path)
     {
-        std::string path = req.getPath();
         std::string figi = path.substr(std::string("/api/v1/instruments/").length());
         
         if (figi.empty()) {
@@ -154,6 +219,9 @@ private:
         res.setBody(instrumentToJson(*instrument).dump());
     }
 
+    /**
+     * @brief Преобразует объект Quote в JSON.
+     */
     nlohmann::json quoteToJson(const domain::Quote& quote)
     {
         nlohmann::json j;
@@ -167,6 +235,9 @@ private:
         return j;
     }
 
+    /**
+     * @brief Преобразует объект Instrument в JSON.
+     */
     nlohmann::json instrumentToJson(const domain::Instrument& instr)
     {
         nlohmann::json j;
