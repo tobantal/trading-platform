@@ -22,7 +22,7 @@ class MarketService : public ports::input::IMarketService {
 public:
     MarketService(
         std::shared_ptr<ports::output::IBrokerGateway> broker,
-        std::shared_ptr<ports::output::ICachePort> cache,
+        std::shared_ptr<ports::output::ICachePort> cache,// TODO: лучше использовать несколько кэшей с глобальным TTL
         std::shared_ptr<ports::output::IEventBus> eventBus
     ) : broker_(std::move(broker))
       , cache_(std::move(cache))

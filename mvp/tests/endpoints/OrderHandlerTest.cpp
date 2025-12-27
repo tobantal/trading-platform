@@ -10,6 +10,7 @@
 #include "adapters/secondary/persistence/InMemoryOrderRepository.hpp"
 #include "adapters/secondary/persistence/InMemoryAccountRepository.hpp"
 #include "adapters/secondary/persistence/InMemoryUserRepository.hpp"
+#include "domain/Money.hpp"
 
 #include <SimpleRequest.hpp>
 #include <SimpleResponse.hpp>
@@ -45,9 +46,13 @@ protected:
         testAccount.userId = "user-123";
         testAccount.name = "Test Account";
         testAccount.type = AccountType::SANDBOX;
-        testAccount.isActive = true;
+        testAccount.active = true;
         accountRepository_->save(testAccount);
-        
+
+        // РЕГИСТРИРУЕМ АККАУНТ В БРОКЕРЕ
+        broker_->registerAccount("account-456", "test-token");
+        broker_->setCash("account-456", trading::domain::Money::fromDouble(1000000.0, "RUB"));
+            
         // Создаем сервисы
         auto authService = std::make_shared<AuthService>(
             jwtAdapter_, userRepository_, accountRepository_);

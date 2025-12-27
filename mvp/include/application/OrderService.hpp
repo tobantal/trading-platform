@@ -39,7 +39,7 @@ public:
      */
     domain::OrderResult placeOrder(const domain::OrderRequest& request) override {
         // Размещаем ордер у брокера
-        auto result = broker_->placeOrder(request);
+        auto result = broker_->placeOrder(request.accountId, request);
 
         if (result.status != domain::OrderStatus::REJECTED) {
             // Создаём объект ордера для сохранения
@@ -85,7 +85,7 @@ public:
         }
 
         // Отменяем у брокера
-        bool cancelled = broker_->cancelOrder(orderId);
+        bool cancelled = broker_->cancelOrder(accountId, orderId);
         if (cancelled) {
             orderRepository_->updateStatus(orderId, domain::OrderStatus::CANCELLED);
             publishOrderCancelledEvent(*order);

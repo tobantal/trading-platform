@@ -18,7 +18,7 @@ struct Account {
     std::string name;           ///< Название ("Tinkoff Sandbox", "Основной счёт")
     AccountType type;           ///< SANDBOX / PRODUCTION
     std::string accessToken;    ///< API токен (зашифрован в БД)
-    bool isActive = false;      ///< Активный счёт для текущего пользователя
+    bool active = false;      ///< Активный счёт для текущего пользователя
     Timestamp createdAt;        ///< Дата создания
 
     Account() = default;
@@ -31,7 +31,7 @@ struct Account {
         const std::string& accessToken,
         bool isActive = false
     ) : id(id), userId(userId), name(name), type(type), 
-        accessToken(accessToken), isActive(isActive), createdAt(Timestamp::now()) {}
+        accessToken(accessToken), active(isActive), createdAt(Timestamp::now()) {}
 };
 
 } // namespace trading::domain

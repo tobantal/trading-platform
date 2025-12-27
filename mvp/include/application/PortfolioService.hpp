@@ -26,9 +26,7 @@ public:
      * @brief Получить портфель счёта
      */
     domain::Portfolio getPortfolio(const std::string& accountId) override {
-        // В MVP используем единый FakeTinkoffAdapter для всех счетов
-        // В реальности здесь был бы выбор адаптера по accountId
-        return broker_->getPortfolio();
+        return broker_->getPortfolio(accountId);
     }
 
     /**
@@ -38,7 +36,7 @@ public:
         const std::string& accountId,
         const std::string& figi
     ) override {
-        auto positions = broker_->getPositions();
+        auto positions = broker_->getPortfolio(accountId).positions;
         for (const auto& pos : positions) {
             if (pos.figi == figi) {
                 return pos;
@@ -51,7 +49,7 @@ public:
      * @brief Получить общую стоимость портфеля
      */
     domain::Money getTotalValue(const std::string& accountId) override {
-        auto portfolio = broker_->getPortfolio();
+        auto portfolio = broker_->getPortfolio(accountId);
         return portfolio.totalValue;
     }
 
@@ -59,7 +57,7 @@ public:
      * @brief Получить доступные средства
      */
     domain::Money getAvailableCash(const std::string& accountId) override {
-        return broker_->getCash();
+        return broker_->getPortfolio(accountId).cash;
     }
 
 private:

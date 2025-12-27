@@ -44,7 +44,7 @@ public:
         }
 
         // Получаем активный счёт
-        auto account = accountService_->getActiveAccount(*userId);
+        auto account = accountService_->getActiveAccount(*userId);//FIXME: плохой подход, выпилить
         if (!account) {
             res.setStatus(400);
             res.setHeader("Content-Type", "application/json");
