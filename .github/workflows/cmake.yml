@@ -59,7 +59,7 @@ jobs:
         echo "=== Available tests ==="
         ./$TEST_EXECUTABLE --gtest_list_tests || true
       
-    - name: ✅ Run tests
+    - name: ✅ Run MVP tests
       run: |
         # Ищем mvp_tests в разных местах
         if [ -f build/mvp/mvp_tests ]; then
@@ -111,18 +111,38 @@ jobs:
     
     steps:
     - name: 🔄 Checkout
-      uses: actions/checkout@v4
-      
+      uses: actions/checkout@v4 
+
+    - name: 🔍 Debug file structure
+      run: |
+        echo "=== Current directory structure ==="
+        pwd
+        ls -la
+        echo ""
+        echo "=== Looking for Dockerfile ==="
+        find . -name "Dockerfile" -type f 2>/dev/null | head -20
+
     - name: 🐳 Build Docker image
       run: |
-        # Dockerfile находится в mvp/, а не в корне
-        if [ -f Dockerfile ]; then
+        # Проверяем где находится Dockerfile и меняем в него директорию
+        if [ -f "Dockerfile" ]; then
+          echo "Building from root Dockerfile"
           docker build -t trading-mvp:test .
-        elif [ -f mvp/Dockerfile ]; then
-          docker build -t trading-mvp:test -f mvp/Dockerfile mvp/
+        elif [ -f "mvp/Dockerfile" ]; then
+          echo "Building from mvp/Dockerfile"
+          cd mvp
+          docker build -t trading-mvp:test .
+        elif [ -f "docker/Dockerfile" ]; then
+          echo "Building from docker/Dockerfile"
+          cd docker
+          docker build -t trading-mvp:test .
         else
-          echo "WARNING: Dockerfile not found, skipping docker build"
-          exit 0
+          echo "ERROR: Dockerfile not found!"
+          echo "Current directory contents:"
+          ls -la
+          echo "Searching for Dockerfile..."
+          find . -name "Dockerfile" -type f 2>/dev/null
+          exit 1
         fi
       
     - name: 🏥 Test health endpoint
