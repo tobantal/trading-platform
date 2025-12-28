@@ -115,9 +115,9 @@ private:
 
     void initTestUsers() {
         // Тестовые пользователи для демо
-        save(domain::User("user-001", "trader1"));
-        save(domain::User("user-002", "trader2"));
-        save(domain::User("user-003", "admin"));
+        save(domain::User("user-001", "trader1", "pas1"));
+        save(domain::User("user-002", "trader2", "pas2"));
+        save(domain::User("user-003", "admin", "secret123"));
     }
 
     std::string generateUuid() {

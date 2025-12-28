@@ -1,7 +1,13 @@
 #include "TradingApp.hpp"
 
+// Auth Handlers (Primary Adapters) — НОВЫЕ
+#include "adapters/primary/auth/LoginHandler.hpp"
+#include "adapters/primary/auth/SelectAccountHandler.hpp"
+#include "adapters/primary/auth/ValidateTokenHandler.hpp"
+#include "adapters/primary/auth/RefreshTokenHandler.hpp"
+#include "adapters/primary/auth/LogoutHandler.hpp"
+
 // Handlers (Primary Adapters)
-#include "adapters/primary/AuthHandler.hpp"
 #include "adapters/primary/MarketHandler.hpp"
 #include "adapters/primary/OrderHandler.hpp"
 #include "adapters/primary/PortfolioHandler.hpp"
@@ -170,12 +176,52 @@ void TradingApp::configureInjection()
 
     std::cout << "\n🎮 Registering HTTP Handlers via DI..." << std::endl;
 
-    // Auth Handler
+    // ========================================================================
+    // AUTH HANDLERS (5 хэндлеров) — НОВАЯ СТРУКТУРА
+    // ========================================================================
     {
-        auto handler = injector.create<std::shared_ptr<trading::adapters::primary::AuthHandler>>();
-        handlers_[getHandlerKey("POST", "/api/v1/auth/login")] = handler;
-        handlers_[getHandlerKey("POST", "/api/v1/auth/validate")] = handler;
-        std::cout << "  ✓ AuthHandler: POST /api/v1/auth/login, /api/v1/auth/validate" << std::endl;
+        // POST /api/v1/auth/login
+        auto loginHandler = injector.create<
+        std::shared_ptr<trading::adapters::primary::LoginHandler>
+        >();
+        handlers_[getHandlerKey("POST", "/api/v1/auth/login")] = loginHandler;
+        std::cout << "  ✓ LoginHandler: POST /api/v1/auth/login" << std::endl;
+    }
+
+    {
+        // POST /api/v1/auth/select-account (НОВЫЙ)
+        auto selectAccountHandler = injector.create<
+            std::shared_ptr<trading::adapters::primary::SelectAccountHandler>
+        >();
+        handlers_[getHandlerKey("POST", "/api/v1/auth/select-account")] = selectAccountHandler;
+        std::cout << "  ✓ SelectAccountHandler: POST /api/v1/auth/select-account" << std::endl;
+    }
+
+    {
+        // POST /api/v1/auth/validate
+        auto validateHandler = injector.create<
+            std::shared_ptr<trading::adapters::primary::ValidateTokenHandler>
+        >();
+        handlers_[getHandlerKey("POST", "/api/v1/auth/validate")] = validateHandler;
+        std::cout << "  ✓ ValidateTokenHandler: POST /api/v1/auth/validate" << std::endl;
+    }
+
+    {
+        // POST /api/v1/auth/refresh (НОВЫЙ)
+        auto refreshHandler = injector.create<
+            std::shared_ptr<trading::adapters::primary::RefreshTokenHandler>
+        >();
+        handlers_[getHandlerKey("POST", "/api/v1/auth/refresh")] = refreshHandler;
+        std::cout << "  ✓ RefreshTokenHandler: POST /api/v1/auth/refresh" << std::endl;
+    }
+
+    {
+        // POST /api/v1/auth/logout (НОВЫЙ)
+        auto logoutHandler = injector.create<
+            std::shared_ptr<trading::adapters::primary::LogoutHandler>
+        >();
+        handlers_[getHandlerKey("POST", "/api/v1/auth/logout")] = logoutHandler;
+        std::cout << "  ✓ LogoutHandler: POST /api/v1/auth/logout" << std::endl;
     }
 
     // Market Handler

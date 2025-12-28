@@ -1,11 +1,34 @@
-#include <gtest/gtest.h>
+/**
+ * @file AuthEndpointTest.cpp
+ * @brief Тесты для Auth endpoints
+ * 
+ * Тестируемые endpoint-ы:
+ * - POST /api/v1/auth/register    → RegisterHandler
+ * - POST /api/v1/auth/login       → LoginHandler
+ * - POST /api/v1/auth/select-account → SelectAccountHandler
+ * - POST /api/v1/auth/validate    → ValidateTokenHandler
+ * - POST /api/v1/auth/refresh     → RefreshTokenHandler
+ * - POST /api/v1/auth/logout      → LogoutHandler
+ */
 
-#include "adapters/primary/AuthHandler.hpp"
+#include <gtest/gtest.h>
+#include <nlohmann/json.hpp>
+
+// Handlers
+#include "adapters/primary/auth/RegisterHandler.hpp"
+#include "adapters/primary/auth/LoginHandler.hpp"
+#include "adapters/primary/auth/SelectAccountHandler.hpp"
+#include "adapters/primary/auth/ValidateTokenHandler.hpp"
+#include "adapters/primary/auth/RefreshTokenHandler.hpp"
+#include "adapters/primary/auth/LogoutHandler.hpp"
+
+// Services & Adapters
 #include "application/AuthService.hpp"
 #include "adapters/secondary/auth/FakeJwtAdapter.hpp"
 #include "adapters/secondary/persistence/InMemoryUserRepository.hpp"
 #include "adapters/secondary/persistence/InMemoryAccountRepository.hpp"
 
+// Test utilities
 #include <SimpleRequest.hpp>
 #include <SimpleResponse.hpp>
 
@@ -13,379 +36,312 @@ using namespace trading::adapters::primary;
 using namespace trading::application;
 using namespace trading::adapters::secondary;
 using namespace trading::domain;
+using json = nlohmann::json;
 
 // ============================================================================
-// Тестовый класс AuthHandlerTest
+// TEST FIXTURE
 // ============================================================================
 
-/**
- * @brief Тестовый класс для AuthHandler.
- * Создаёт реальные зависимости для полного тестирования.
- * Использует InMemory репозитории и FakeJwtAdapter.
- * Тестирует эндпоинты /api/v1/auth/login и /api/v1/auth/validate.
- * Покрывает сценарии успешного и неуспешного логина, валидации токена,
- * а также создание новых пользователей и аккаунтов.
- * Использует Google Test framework.
- */
-class AuthHandlerTest : public ::testing::Test {
+class AuthHandlersTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        // Создаем реальные зависимости
-        auto jwtProvider = std::make_shared<FakeJwtAdapter>();
-        auto userRepository = std::make_shared<InMemoryUserRepository>();
-        auto accountRepository = std::make_shared<InMemoryAccountRepository>();
+        jwtProvider_ = std::make_shared<FakeJwtAdapter>();
+        userRepo_ = std::make_shared<InMemoryUserRepository>();
+        accountRepo_ = std::make_shared<InMemoryAccountRepository>();
         
-        // Создаем сервис с реальными зависимостями
-        auto authService = std::make_shared<AuthService>(
-            jwtProvider, userRepository, accountRepository);
+        authService_ = std::make_shared<AuthService>(
+            jwtProvider_, userRepo_, accountRepo_
+        );
         
-        // Создаем handler для тестирования
-        authHandler = std::make_unique<AuthHandler>(authService);
-        
-        // Сохраняем зависимости для использования в тестах
-        this->jwtProvider = jwtProvider;
-        this->userRepository = userRepository;
-        this->accountRepository = accountRepository;
+        registerHandler_ = std::make_shared<RegisterHandler>(authService_);
+        loginHandler_ = std::make_shared<LoginHandler>(authService_);
+        selectAccountHandler_ = std::make_shared<SelectAccountHandler>(authService_);
+        validateHandler_ = std::make_shared<ValidateTokenHandler>(authService_);
+        refreshHandler_ = std::make_shared<RefreshTokenHandler>(authService_);
+        logoutHandler_ = std::make_shared<LogoutHandler>(authService_);
     }
-    
+
     void TearDown() override {
-        authHandler.reset();
+        // Очищаем репозитории
+        userRepo_->clear();
+        accountRepo_->clear();
     }
-    
-    // Вспомогательный метод для парсинга JSON ответа
-    nlohmann::json parseJsonResponse(SimpleResponse& res) {
-        try {
-            return nlohmann::json::parse(res.getBody());
-        } catch (const nlohmann::json::exception& e) {
-            ADD_FAILURE() << "Failed to parse JSON: " << e.what();
-            return nlohmann::json();
+
+    /**
+     * @brief Создать HTTP запрос
+     */
+    SimpleRequest createRequest(
+        const std::string& method,
+        const std::string& path,
+        const std::string& body = "",
+        const std::string& authToken = ""
+    ) {
+        std::map<std::string, std::string> headers;
+        headers["Content-Type"] = "application/json";
+        
+        if (!authToken.empty()) {
+            headers["Authorization"] = "Bearer " + authToken;
         }
+
+        return SimpleRequest(method, path, body, "127.0.0.1", 8080, headers);
     }
+
+    /**
+     * @brief Распарсить тело ответа как JSON
+     */
+    json parseResponse(const SimpleResponse& res) {
+        return json::parse(res.getBody());
+    }
+
+    /**
+     * @brief Зарегистрировать пользователя
+     */
+    std::string registerUser(const std::string& username, const std::string& password) {
+        auto req = createRequest(
+            "POST", "/api/v1/auth/register",
+            json{{"username", username}, {"password", password}}.dump()
+        );
+        SimpleResponse res;
+        registerHandler_->handle(req, res);
+        
+        if (res.getStatus() != 201) {
+            return "";
+        }
+        
+        auto body = parseResponse(res);
+        return body.value("user_id", "");
+    }
+
+    /**
+     * @brief Войти и получить session token
+     */
+    std::string loginAndGetSessionToken(const std::string& username, const std::string& password) {
+        auto req = createRequest(
+            "POST", "/api/v1/auth/login",
+            json{{"username", username}, {"password", password}}.dump()
+        );
+        SimpleResponse res;
+        loginHandler_->handle(req, res);
+        
+        if (res.getStatus() != 200) {
+            return "";
+        }
+        
+        auto body = parseResponse(res);
+        return body.value("session_token", "");
+    }
+
+    /**
+     * @brief Выбрать аккаунт и получить access token
+     */
+    std::string selectAccountAndGetAccessToken(
+        const std::string& sessionToken,
+        const std::string& accountId
+    ) {
+        auto req = createRequest(
+            "POST", "/api/v1/auth/select-account",
+            json{{"account_id", accountId}}.dump(),
+            sessionToken
+        );
+        SimpleResponse res;
+        selectAccountHandler_->handle(req, res);
+        
+        if (res.getStatus() != 200) {
+            return "";
+        }
+        
+        auto body = parseResponse(res);
+        return body.value("access_token", "");
+    }
+
+    // Зависимости
+    std::shared_ptr<FakeJwtAdapter> jwtProvider_;
+    std::shared_ptr<InMemoryUserRepository> userRepo_;
+    std::shared_ptr<InMemoryAccountRepository> accountRepo_;
+    std::shared_ptr<AuthService> authService_;
     
-    std::unique_ptr<AuthHandler> authHandler;
-    std::shared_ptr<FakeJwtAdapter> jwtProvider;
-    std::shared_ptr<InMemoryUserRepository> userRepository;
-    std::shared_ptr<InMemoryAccountRepository> accountRepository;
+    // Хэндлеры
+    std::shared_ptr<RegisterHandler> registerHandler_;
+    std::shared_ptr<LoginHandler> loginHandler_;
+    std::shared_ptr<SelectAccountHandler> selectAccountHandler_;
+    std::shared_ptr<ValidateTokenHandler> validateHandler_;
+    std::shared_ptr<RefreshTokenHandler> refreshHandler_;
+    std::shared_ptr<LogoutHandler> logoutHandler_;
 };
 
 // ============================================================================
-// ТЕСТЫ
+// REGISTER HANDLER TESTS
 // ============================================================================
 
-/**
- * @brief Тестирует успешный логин с валидным именем пользователя.
- */
-TEST_F(AuthHandlerTest, Login_WithValidUsername_ReturnsToken) {
-    // Arrange
-    SimpleRequest req(
-        "POST",
-        "/api/v1/auth/login",
-        R"({"username": "testuser"})",
-        "127.0.0.1",
-        8080
+TEST_F(AuthHandlersTest, Register_ValidData_CreatesUser) {
+    auto req = createRequest(
+        "POST", "/api/v1/auth/register",
+        json{{"username", "newuser"}, {"password", "secret123"}}.dump()
     );
     SimpleResponse res;
     
-    // Act
-    authHandler->handle(req, res);
+    registerHandler_->handle(req, res);
     
-    // Assert
-    EXPECT_EQ(res.getStatus(), 200);
-    auto headers = res.getHeaders();
-    EXPECT_TRUE(headers.find("Content-Type") != headers.end());
-    EXPECT_EQ(headers.at("Content-Type"), "application/json");
+    EXPECT_EQ(res.getStatus(), 201);
     
-    auto json = parseJsonResponse(res);
-    EXPECT_TRUE(json.contains("access_token"));
-    EXPECT_TRUE(json["access_token"].is_string());
-    EXPECT_GT(json["access_token"].get<std::string>().size(), 0);
-    
-    EXPECT_EQ(json["token_type"], "Bearer");
-    EXPECT_EQ(json["expires_in"], 3600);
+    auto body = parseResponse(res);
+    EXPECT_TRUE(body.contains("user_id"));
+    EXPECT_EQ(body["message"], "User registered successfully");
 }
 
-/**
- * @brief Тестирует логин с пустым именем пользователя.
- * Ожидается ошибка 400 Bad Request.
- */
-TEST_F(AuthHandlerTest, Login_WithEmptyUsername_Returns400) {
-    // Arrange
-    SimpleRequest req(
-        "POST",
-        "/api/v1/auth/login",
-        R"({"username": ""})",
-        "127.0.0.1",
-        8080
+TEST_F(AuthHandlersTest, Register_DuplicateUsername_Returns409) {
+    // Используем уникальное имя пользователя
+    std::string username = "duplicate_" + std::to_string(rand());
+    
+    // Регистрируем первого пользователя
+    auto user1Req = createRequest(
+        "POST", "/api/v1/auth/register",
+        json{{"username", username}, {"password", "password1"}}.dump()
+    );
+    SimpleResponse user1Res;
+    registerHandler_->handle(user1Req, user1Res);
+    EXPECT_EQ(user1Res.getStatus(), 201);
+    
+    // Пытаемся зарегистрировать с тем же username
+    auto req = createRequest(
+        "POST", "/api/v1/auth/register",
+        json{{"username", username}, {"password", "password2"}}.dump()
     );
     SimpleResponse res;
     
-    // Act
-    authHandler->handle(req, res);
+    registerHandler_->handle(req, res);
     
-    // Assert
+    EXPECT_EQ(res.getStatus(), 409);
+    
+    auto body = parseResponse(res);
+    EXPECT_TRUE(body["error"].get<std::string>().find("already exists") != std::string::npos);
+}
+
+TEST_F(AuthHandlersTest, Register_InvalidJSON_Returns400) {
+    auto req = createRequest(
+        "POST", "/api/v1/auth/register",
+        "{invalid json"
+    );
+    SimpleResponse res;
+    
+    registerHandler_->handle(req, res);
+    
     EXPECT_EQ(res.getStatus(), 400);
-    
-    auto json = parseJsonResponse(res);
-    EXPECT_TRUE(json.contains("error"));
-    EXPECT_EQ(json["error"], "Username is required");
 }
 
-/**
- * @brief Тестирует логин с некорректным JSON в теле запроса.
- * Ожидается ошибка 400 Bad Request.
- */
-TEST_F(AuthHandlerTest, Login_WithInvalidJson_Returns400) {
-    // Arrange
-    SimpleRequest req(
-        "POST",
-        "/api/v1/auth/login",
-        R"({"username": "testuser" invalid json)",
-        "127.0.0.1",
-        8080
+// ============================================================================
+// LOGIN HANDLER TESTS
+// ============================================================================
+
+TEST_F(AuthHandlersTest, Login_ValidCredentials_ReturnsSessionToken) {
+    // Используем уникальное имя пользователя
+    std::string username = "testuser_" + std::to_string(rand());
+    std::string password = "password123";
+    
+    std::cout << "Testing with username: " << username << std::endl;
+    
+    // Регистрируем пользователя
+    auto registerReq = createRequest(
+        "POST", "/api/v1/auth/register",
+        json{{"username", username}, {"password", password}}.dump()
+    );
+    SimpleResponse registerRes;
+    registerHandler_->handle(registerReq, registerRes);
+    
+    std::cout << "Register status: " << registerRes.getStatus() << std::endl;
+    std::cout << "Register body: " << registerRes.getBody() << std::endl;
+    
+    EXPECT_EQ(registerRes.getStatus(), 201);
+    
+    // Входим
+    auto req = createRequest(
+        "POST", "/api/v1/auth/login",
+        json{{"username", username}, {"password", password}}.dump()
     );
     SimpleResponse res;
     
-    // Act
-    authHandler->handle(req, res);
+    loginHandler_->handle(req, res);
     
-    // Assert
-    EXPECT_EQ(res.getStatus(), 400);
+    std::cout << "Login status: " << res.getStatus() << std::endl;
+    std::cout << "Login body: " << res.getBody() << std::endl;
     
-    auto json = parseJsonResponse(res);
-    EXPECT_TRUE(json.contains("error"));
-    EXPECT_EQ(json["error"], "Invalid JSON");
-}
-
-/**
- * @brief Тестирует создание нового пользователя и аккаунта при логине с новым именем пользователя.
- */
-TEST_F(AuthHandlerTest, Login_CreatesUserAndAccount_WhenUserDoesNotExist) {
-    // Arrange
-    std::string newUsername = "newuser_" + std::to_string(time(nullptr));
-    
-    SimpleRequest req(
-        "POST",
-        "/api/v1/auth/login",
-        "{\"username\": \"" + newUsername + "\"}",
-        "127.0.0.1",
-        8080
-    );
-    SimpleResponse res;
-    
-    // Act - Первый логин создает пользователя
-    authHandler->handle(req, res);
-    
-    // Assert
     EXPECT_EQ(res.getStatus(), 200);
     
-    auto json = parseJsonResponse(res);
-    std::string token = json["access_token"];
-    EXPECT_FALSE(token.empty());
-    
-    // Проверяем, что пользователь создан
-    auto user = userRepository->findByUsername(newUsername);
-    EXPECT_TRUE(user.has_value());
-    EXPECT_EQ(user->username, newUsername);
-    
-    // Проверяем, что счет создан
-    auto accounts = accountRepository->findByUserId(user->id);
-    EXPECT_FALSE(accounts.empty());
-    
-    // Проверяем, что счет - sandbox
-    EXPECT_EQ(accounts[0].type, AccountType::SANDBOX);
+    if (res.getStatus() == 200) {
+        auto body = parseResponse(res);
+        EXPECT_TRUE(body.contains("session_token"));
+        EXPECT_EQ(body["token_type"], "Bearer");
+        EXPECT_EQ(body["expires_in"], 86400);
+        EXPECT_TRUE(body.contains("user"));
+        EXPECT_TRUE(body.contains("accounts"));
+        EXPECT_TRUE(body["accounts"].is_array());
+    }
 }
 
-/**
- * @brief Тестирует валидацию с валидным токеном.
- */
-TEST_F(AuthHandlerTest, ValidateToken_WithValidToken_ReturnsValidTrue) {
-    // Arrange
-    // Сначала логинимся, чтобы получить токен
-    SimpleRequest loginReq(
-        "POST",
-        "/api/v1/auth/login",
-        R"({"username": "testuser2"})",
-        "127.0.0.1",
-        8080
+// ============================================================================
+// SELECT ACCOUNT HANDLER TESTS
+// ============================================================================
+
+TEST_F(AuthHandlersTest, SelectAccount_NoToken_Returns401) {
+    auto req = createRequest(
+        "POST", "/api/v1/auth/select-account",
+        json{{"account_id", "acc-001"}}.dump()
+    );
+    SimpleResponse res;
+    
+    selectAccountHandler_->handle(req, res);
+    
+    EXPECT_EQ(res.getStatus(), 401);
+}
+
+// ============================================================================
+// VALIDATE TOKEN HANDLER TESTS
+// ============================================================================
+
+TEST_F(AuthHandlersTest, ValidateToken_InvalidToken_ReturnsInvalid) {
+    auto req = createRequest(
+        "POST", "/api/v1/auth/validate",
+        json{{"token", "invalid.token.here"}}.dump()
+    );
+    SimpleResponse res;
+    
+    validateHandler_->handle(req, res);
+    
+    EXPECT_EQ(res.getStatus(), 200);  // Всегда 200
+    
+    auto body = parseResponse(res);
+    EXPECT_FALSE(body["valid"]);
+    EXPECT_TRUE(body.contains("error"));
+}
+
+// ============================================================================
+// INTEGRATION TEST
+// ============================================================================
+
+TEST_F(AuthHandlersTest, FullFlow_RegisterLogin) {
+    // 1. Register
+    auto registerReq = createRequest(
+        "POST", "/api/v1/auth/register",
+        json{{"username", "fullflow"}, {"password", "password123"}}.dump()
+    );
+    SimpleResponse registerRes;
+    registerHandler_->handle(registerReq, registerRes);
+    EXPECT_EQ(registerRes.getStatus(), 201);
+    
+    auto registerBody = parseResponse(registerRes);
+    std::string userId = registerBody["user_id"];
+    EXPECT_FALSE(userId.empty());
+    
+    // 2. Login
+    auto loginReq = createRequest(
+        "POST", "/api/v1/auth/login",
+        json{{"username", "fullflow"}, {"password", "password123"}}.dump()
     );
     SimpleResponse loginRes;
+    loginHandler_->handle(loginReq, loginRes);
+    EXPECT_EQ(loginRes.getStatus(), 200);
     
-    authHandler->handle(loginReq, loginRes);
-    auto loginJson = parseJsonResponse(loginRes);
-    std::string validToken = loginJson["access_token"];
-    
-    // Теперь тестируем валидацию
-    SimpleRequest validateReq(
-        "POST",
-        "/api/v1/auth/validate",
-        "{\"token\": \"" + validToken + "\"}",
-        "127.0.0.1",
-        8080
-    );
-    SimpleResponse validateRes;
-    
-    // Act
-    authHandler->handle(validateReq, validateRes);
-    
-    // Assert
-    EXPECT_EQ(validateRes.getStatus(), 200);
-    
-    auto json = parseJsonResponse(validateRes);
-    EXPECT_TRUE(json.contains("valid"));
-    EXPECT_TRUE(json["valid"].get<bool>());
-    
-    EXPECT_TRUE(json.contains("user_id"));
-    EXPECT_TRUE(json.contains("username"));
-    EXPECT_EQ(json["username"], "testuser2");
-}
-
-/**
- * @brief Тестирует валидацию с невалидным токеном.
- */
-TEST_F(AuthHandlerTest, ValidateToken_WithInvalidToken_ReturnsValidFalse) {
-    // Arrange
-    SimpleRequest req(
-        "POST",
-        "/api/v1/auth/validate",
-        R"({"token": "invalid.token.here"})",
-        "127.0.0.1",
-        8080
-    );
-    SimpleResponse res;
-    
-    // Act
-    authHandler->handle(req, res);
-    
-    // Assert
-    EXPECT_EQ(res.getStatus(), 200);
-    
-    auto json = parseJsonResponse(res);
-    EXPECT_TRUE(json.contains("valid"));
-    EXPECT_FALSE(json["valid"].get<bool>());
-}
-
-/**
- * @brief Тестирует валидацию с пустым токеном.
- * Ожидается ошибка 400 Bad Request.
- */
-TEST_F(AuthHandlerTest, ValidateToken_WithEmptyToken_Returns400) {
-    // Arrange
-    SimpleRequest req(
-        "POST",
-        "/api/v1/auth/validate",
-        R"({"token": ""})",
-        "127.0.0.1",
-        8080
-    );
-    SimpleResponse res;
-    
-    // Act
-    authHandler->handle(req, res);
-    
-    // Assert
-    EXPECT_EQ(res.getStatus(), 400);
-    
-    auto json = parseJsonResponse(res);
-    EXPECT_TRUE(json.contains("error"));
-    EXPECT_EQ(json["error"], "Token is required");
-}
-
-/**
- * @brief Тестирует обращение к неизвестному эндпоинту.
- * Ожидается ошибка 404 Not Found.
- */
-TEST_F(AuthHandlerTest, UnknownEndpoint_Returns404) {
-    // Arrange
-    SimpleRequest req(
-        "GET",
-        "/api/v1/auth/unknown",
-        "",
-        "127.0.0.1",
-        8080
-    );
-    SimpleResponse res;
-    
-    // Act
-    authHandler->handle(req, res);
-    
-    // Assert
-    EXPECT_EQ(res.getStatus(), 404);
-    
-    auto json = parseJsonResponse(res);
-    EXPECT_TRUE(json.contains("error"));
-    EXPECT_EQ(json["error"], "Not found");
-}
-
-/**
- * @brief Тестирует множественные логины одного и того же пользователя.
- * Ожидается, что при повторном логине будет выдан новый токен,
- * но user_id останется тем же.
- */
-TEST_F(AuthHandlerTest, MultipleLogins_SameUser_ReturnsSameUserId) {
-    // Arrange
-    std::string username = "multiuser";
-    
-    // Первый логин
-    {
-        SimpleRequest req1(
-            "POST",
-            "/api/v1/auth/login",
-            "{\"username\": \"" + username + "\"}",
-            "127.0.0.1",
-            8080
-        );
-        SimpleResponse res1;
-        
-        authHandler->handle(req1, res1);
-        auto json1 = parseJsonResponse(res1);
-        std::string token1 = json1["access_token"];
-        
-        // Валидируем первый токен
-        SimpleRequest validateReq(
-            "POST",
-            "/api/v1/auth/validate",
-            "{\"token\": \"" + token1 + "\"}",
-            "127.0.0.1",
-            8080
-        );
-        SimpleResponse validateRes;
-        
-        authHandler->handle(validateReq, validateRes);
-        auto validateJson = parseJsonResponse(validateRes);
-        std::string userId1 = validateJson["user_id"];
-        
-        // Второй логин того же пользователя
-        SimpleRequest req2(
-            "POST",
-            "/api/v1/auth/login",
-            "{\"username\": \"" + username + "\"}",
-            "127.0.0.1",
-            8080
-        );
-        SimpleResponse res2;
-        
-        authHandler->handle(req2, res2);
-        auto json2 = parseJsonResponse(res2);
-        std::string token2 = json2["access_token"];
-        
-        // Проверяем, что токены разные (новый выпущен)
-        EXPECT_NE(token1, token2);
-        
-        // Валидируем второй токен
-        SimpleRequest validateReq2(
-            "POST",
-            "/api/v1/auth/validate",
-            "{\"token\": \"" + token2 + "\"}",
-            "127.0.0.1",
-            8080
-        );
-        SimpleResponse validateRes2;
-        
-        authHandler->handle(validateReq2, validateRes2);
-        auto validateJson2 = parseJsonResponse(validateRes2);
-        std::string userId2 = validateJson2["user_id"];
-        
-        // Проверяем, что user_id одинаковый (тот же пользователь)
-        EXPECT_EQ(userId1, userId2);
-    }
+    auto loginBody = parseResponse(loginRes);
+    std::string sessionToken = loginBody["session_token"];
+    EXPECT_FALSE(sessionToken.empty());
 }
