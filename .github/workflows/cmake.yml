@@ -31,32 +31,48 @@ jobs:
     - name: ⚙️ Build
       run: cmake --build build -j$(nproc)
       
-    - name: 📋 List test executable
+    - name: 📋 Find test executables
       run: |
-        echo "=== Build directory contents ==="
-        ls -la build/
+        echo "=== Build directory structure ==="
+        find build -name "mvp_tests" -type f 2>/dev/null || echo "mvp_tests not found by name"
         echo ""
         echo "=== Looking for test executables ==="
-        find build -name "*test*" -type f -executable 2>/dev/null || echo "No test executables found"
+        find build -name "*tests" -type f -executable 2>/dev/null | head -20
         echo ""
-        echo "=== Looking for mvp_tests ==="
-        ls -la build/mvp_tests 2>/dev/null || echo "mvp_tests not found"
+        echo "=== MVP subdirectory ==="
+        ls -la build/mvp/ 2>/dev/null || echo "build/mvp/ not found"
 
     - name: 🧪 List available tests
       run: |
-        if [ -f build/mvp_tests ]; then
-          echo "=== Available tests ==="
-          ./build/mvp_tests --gtest_list_tests || true
+        # Ищем mvp_tests в разных местах
+        if [ -f build/mvp/mvp_tests ]; then
+          TEST_EXECUTABLE=build/mvp/mvp_tests
+        elif [ -f build/mvp_tests ]; then
+          TEST_EXECUTABLE=build/mvp_tests
         else
-          echo "Test executable not found!"
+          echo "ERROR: Cannot find mvp_tests executable!"
+          find build -name "*test*" -type f -executable 2>/dev/null
           exit 1
         fi
+        
+        echo "Found test executable: $TEST_EXECUTABLE"
+        echo "=== Available tests ==="
+        ./$TEST_EXECUTABLE --gtest_list_tests || true
       
     - name: ✅ Run tests
       run: |
-        cd build
-        # Запускаем тесты напрямую через исполняемый файл
-        ./mvp_tests --gtest_output=xml:test_results.xml
+        # Ищем mvp_tests в разных местах
+        if [ -f build/mvp/mvp_tests ]; then
+          TEST_EXECUTABLE=build/mvp/mvp_tests
+        elif [ -f build/mvp_tests ]; then
+          TEST_EXECUTABLE=build/mvp_tests
+        else
+          echo "ERROR: Cannot find mvp_tests executable!"
+          exit 1
+        fi
+        
+        echo "Running: $TEST_EXECUTABLE"
+        ./$TEST_EXECUTABLE --gtest_output=xml:build/test_results.xml
       
     - name: 📊 Generate HTML coverage report
       if: always()
