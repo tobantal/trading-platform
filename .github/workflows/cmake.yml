@@ -1,0 +1,116 @@
+name: CMake CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 🔄 Checkout
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+      
+    - name: 🛠 Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake g++ gcovr libboost-all-dev
+      
+    - name: 🏗 Configure with coverage
+      run: |
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DBUILD_TESTS=ON \
+          -DCMAKE_CXX_FLAGS="--coverage -g -O0 -fprofile-arcs -ftest-coverage"
+      
+    - name: ⚙️ Build
+      run: cmake --build build -j$(nproc)
+      
+    - name: 📋 List test executable
+      run: |
+        echo "=== Build directory contents ==="
+        ls -la build/
+        echo ""
+        echo "=== Looking for test executables ==="
+        find build -name "*test*" -type f -executable 2>/dev/null || echo "No test executables found"
+        echo ""
+        echo "=== Looking for mvp_tests ==="
+        ls -la build/mvp_tests 2>/dev/null || echo "mvp_tests not found"
+
+    - name: 🧪 List available tests
+      run: |
+        if [ -f build/mvp_tests ]; then
+          echo "=== Available tests ==="
+          ./build/mvp_tests --gtest_list_tests || true
+        else
+          echo "Test executable not found!"
+          exit 1
+        fi
+      
+    - name: ✅ Run tests
+      run: |
+        cd build
+        # Запускаем тесты напрямую через исполняемый файл
+        ./mvp_tests --gtest_output=xml:test_results.xml
+      
+    - name: 📊 Generate HTML coverage report
+      if: always()
+      run: |
+        gcovr \
+          --root . \
+          --exclude '.*CMakeFiles/.*' \
+          --exclude '.*CompilerIdCXX.*' \
+          --exclude '.*CompilerIdC.*' \
+          --exclude '.*cmake/.*' \
+          --exclude '.*tests/.*' \
+          --exclude '.*_deps/.*' \
+          --exclude '.*demo/.*' \
+          --exclude '.*benchmarks/.*' \
+          --gcov-ignore-parse-errors=all \
+          --html-details coverage.html \
+          --print-summary || true
+              
+    - name: 📤 Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: build/test_results.xml
+
+    - name: 📤 Upload coverage report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: coverage-report-html
+        path: coverage*.html
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    
+    steps:
+    - name: 🔄 Checkout
+      uses: actions/checkout@v4
+      
+    - name: 🐳 Build Docker image
+      run: docker build -t trading-mvp:test .
+      
+    - name: 🏥 Test health endpoint
+      run: |
+        # Запускаем контейнер
+        docker run -d --name trading-test -p 8080:8080 trading-mvp:test
+        
+        # Ждём старта
+        sleep 10
+        
+        # Проверяем health
+        curl -f http://localhost:8080/api/v1/health || exit 1
+        
+        # Останавливаем
+        docker stop trading-test
+        docker rm trading-test
