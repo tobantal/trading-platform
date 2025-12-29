@@ -416,51 +416,51 @@ TEST(OrderSaga, IdempotentEventHandling) {
 ## Обновлённый план на 3 дня (приоритеты)
 
 ### День 1: Стабилизация + Инфраструктура (~10-12 часов)
+
 1.1 Доработка TradingApp.cpp (хэндлеры) 30 мин (done)
+
 1.2 Тесты на новые хэндлеры (Account) 1 час (done)
-1.3 Исправление CI (GitHub Actions) 1 час (done - тесты собираются, отчет формируется с docker есть проблемы, оставим на тех.долг)
+
+1.3 Исправление CI (GitHub Actions) 1 час (done - тесты собираются, отчет 
+формируется с docker есть проблемы, оставим на тех.долг)
+
 1.4 Проверка docker-compose up 1 час (done)
+
 1.5 MetricsHandler — привести в порядок 1 час (done)
+
 1.6 RabbitMQ: добавить в docker-compose 30 мин (done)
+
 1.7 RabbitMQ: IRabbitMQAdapter + реализация 2-3 часа (done)
+
 1.8 Prometheus: проверить scraping 30 мин (done)
+
 1.9 PostgreSQL: схемы + репозитории 3-4 часа (done)
 
 ### День 2: Распил на микросервисы (~10-12 часов)
+
 2.1 Auth Service (структура + код) 2-3 часа
+
 2.2 Broker Service (структура + код) 2-3 часа
+
 2.3 Trading Service (структура + код) 3-4 часа
+
 2.4 API Gateway (nginx) 1 час
+
 2.5 Docker Compose для 3 сервисов 1-2 часа
 
 ### День 3: Saga + UI + Финализация (~10-12 часов)
+
 3.1 Saga: OrderPlaced → OrderExecuted/Rejected 2-3 часа
+
 3.2 Тесты на Saga (5-7 сценариев) 2 часа
+
 3.3 UI: Register + Login 1.5 часа
+
 3.4 UI: Portfolio + Quotes 1.5 часа
+
 3.5 UI: Orders (list + create + cancel) 1.5 часа
+
 3.6 Документация + демо-сценарий 1-2 часа
-
----
-
-## Зависимости и библиотеки
-
-### RabbitMQ Client (C++)
-
-Рекомендую **amqp-cpp** (header-only, работает с Boost.Asio):
-
-```cmake
-FetchContent_Declare(
-    amqpcpp
-    GIT_REPOSITORY https://github.com/CopernicaMarketingSoftware/AMQP-CPP.git
-    GIT_TAG v4.3.26
-)
-FetchContent_MakeAvailable(amqpcpp)
-```
-
-### HTTP Client (для REST между сервисами)
-
-Используем уже имеющийся Boost.Beast или добавляем простой wrapper.
 
 ---
 
