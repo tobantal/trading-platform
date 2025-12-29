@@ -1,9 +1,9 @@
+// include/adapters/primary/OrderHandler.hpp
 #pragma once
 
 #include <IHttpHandler.hpp>
 #include "ports/input/IOrderService.hpp"
 #include "ports/input/IAuthService.hpp"
-#include "ports/input/IAccountService.hpp"
 #include <nlohmann/json.hpp>
 #include <memory>
 #include <iostream>
@@ -19,38 +19,29 @@ namespace trading::adapters::primary {
  * - GET /api/v1/orders
  * - GET /api/v1/orders/{id}
  * - DELETE /api/v1/orders/{id}
+ * 
+ * Требует Access Token (содержит accountId).
  */
 class OrderHandler : public IHttpHandler
 {
 public:
     OrderHandler(
         std::shared_ptr<ports::input::IOrderService> orderService,
-        std::shared_ptr<ports::input::IAuthService> authService,
-        std::shared_ptr<ports::input::IAccountService> accountService
+        std::shared_ptr<ports::input::IAuthService> authService
     ) : orderService_(std::move(orderService))
       , authService_(std::move(authService))
-      , accountService_(std::move(accountService))
     {
         std::cout << "[OrderHandler] Created" << std::endl;
     }
 
     void handle(IRequest& req, IResponse& res) override
     {
-        // Проверяем авторизацию
-        auto userId = extractUserId(req);
-        if (!userId) {
+        // Извлекаем accountId из access token
+        auto accountId = extractAccountId(req);
+        if (!accountId) {
             res.setStatus(401);
             res.setHeader("Content-Type", "application/json");
-            res.setBody(R"({"error": "Unauthorized"})");
-            return;
-        }
-
-        // Получаем активный счёт
-        auto account = accountService_->getActiveAccount(*userId);
-        if (!account) {
-            res.setStatus(400);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(R"({"error": "No active account found"})");
+            res.setBody(R"({"error": "Access token required. Use POST /api/v1/auth/select-account to get one."})");
             return;
         }
 
@@ -61,13 +52,13 @@ public:
         std::string path = extractPath(fullPath);
         
         if (method == "POST" && path == "/api/v1/orders") {
-            handleCreateOrder(req, res, account->id);
+            handleCreateOrder(req, res, *accountId);
         } else if (method == "GET" && path == "/api/v1/orders") {
-            handleGetOrders(res, account->id);
+            handleGetOrders(res, *accountId);
         } else if (method == "GET" && path.find("/api/v1/orders/") == 0) {
-            handleGetOrder(res, account->id, path);
+            handleGetOrder(res, *accountId, path);
         } else if (method == "DELETE" && path.find("/api/v1/orders/") == 0) {
-            handleCancelOrder(res, account->id, path);
+            handleCancelOrder(res, *accountId, path);
         } else {
             res.setStatus(404);
             res.setHeader("Content-Type", "application/json");
@@ -78,7 +69,6 @@ public:
 private:
     std::shared_ptr<ports::input::IOrderService> orderService_;
     std::shared_ptr<ports::input::IAuthService> authService_;
-    std::shared_ptr<ports::input::IAccountService> accountService_;
 
     /**
      * @brief Извлекает путь без query string
@@ -166,9 +156,10 @@ private:
     {
         auto orders = orderService_->getAllOrders(accountId);
 
-        nlohmann::json response = nlohmann::json::array();
+        nlohmann::json response;
+        response["orders"] = nlohmann::json::array();
         for (const auto& order : orders) {
-            response.push_back(orderToJson(order));
+            response["orders"].push_back(orderToJson(order));
         }
 
         res.setStatus(200);
@@ -240,9 +231,9 @@ private:
     }
 
     /**
-     * @brief Извлекает userId из заголовков Authorization.
+     * @brief Извлекает accountId из access token
      */
-    std::optional<std::string> extractUserId(IRequest& req)
+    std::optional<std::string> extractAccountId(IRequest& req)
     {
         auto headers = req.getHeaders();
         auto it = headers.find("Authorization");
@@ -256,7 +247,7 @@ private:
         }
 
         std::string token = auth.substr(7);
-        return authService_->getUserIdFromToken(token);
+        return authService_->getAccountIdFromToken(token);
     }
 };
 

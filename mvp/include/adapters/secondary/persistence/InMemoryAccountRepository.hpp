@@ -1,3 +1,4 @@
+// include/adapters/secondary/persistence/InMemoryAccountRepository.hpp
 #pragma once
 
 #include "ports/output/IAccountRepository.hpp"
@@ -7,12 +8,25 @@
 #include <sstream>
 #include <iomanip>
 #include <set>
+#include <iostream>
 
 
 namespace trading::adapters::secondary {
 
 /**
  * @brief In-memory реализация репозитория брокерских счетов
+ * 
+ * Тестовые аккаунты (привязаны к пользователям из InMemoryUserRepository):
+ * ┌───────────────────────┬──────────┬───────────────────┬────────────┐
+ * │ ID                    │ UserId   │ Name              │ Type       │
+ * ├───────────────────────┼──────────┼───────────────────┼────────────┤
+ * │ acc-001-sandbox       │ user-001 │ Sandbox Account   │ SANDBOX    │
+ * │ acc-001-prod          │ user-001 │ Production        │ PRODUCTION │
+ * │ acc-002-sandbox       │ user-002 │ My Sandbox        │ SANDBOX    │
+ * │ acc-004-sandbox       │ user-004 │ Admin Sandbox     │ SANDBOX    │
+ * └───────────────────────┴──────────┴───────────────────┴────────────┘
+ * 
+ * Примечание: user-003 (newbie) не имеет аккаунтов — для теста "добавить аккаунт"
  */
 class InMemoryAccountRepository : public ports::output::IAccountRepository {
 public:
@@ -94,41 +108,6 @@ public:
     }
 
     /**
-     * @brief Установить активный счёт для пользователя
-     */
-    void setActiveAccount(const std::string& userId, const std::string& accountId) override {
-        auto account = accounts_.find(accountId);
-        if (!account || account->userId != userId) {
-            return;
-        }
-        
-        std::lock_guard<std::mutex> lock(indexMutex_);
-        activeAccounts_[userId] = accountId;
-    }
-
-    /**
-     * @brief Найти активный счёт пользователя
-     */
-    std::optional<domain::Account> findActiveByUserId(const std::string& userId) override {
-        std::string accountId;
-        {
-            std::lock_guard<std::mutex> lock(indexMutex_);
-            auto it = activeAccounts_.find(userId);
-            if (it == activeAccounts_.end()) {
-                // Если нет активного, берём первый
-                auto accIt = userAccounts_.find(userId);
-                if (accIt == userAccounts_.end() || accIt->second.empty()) {
-                    return std::nullopt;
-                }
-                accountId = *accIt->second.begin();
-            } else {
-                accountId = it->second;
-            }
-        }
-        return findById(accountId);
-    }
-
-    /**
      * @brief Создать счёт для пользователя (удобный метод)
      */
     domain::Account createForUser(const std::string& userId, const std::string& name, 
@@ -175,50 +154,81 @@ private:
     }
 
     void initTestAccounts() {
-        // Тестовые пользователи создаются в InMemoryUserRepository
-        // Здесь создаём sandbox счета для них
+        // ================================================================
+        // ТЕСТОВЫЕ АККАУНТЫ
+        // ID пользователей должны совпадать с InMemoryUserRepository!
+        // ================================================================
 
-        // trader1
+        // ----------------------------------------------------------------
+        // trader1 (user-001): 2 аккаунта — sandbox + production
+        // Сценарий: опытный трейдер, переключается между средами
+        // ----------------------------------------------------------------
         {
-            domain::Account acc(
-                "acc-trader1-sandbox",
-                "user-trader1",
-                "Sandbox Trader1",
+            domain::Account sandbox(
+                "acc-001-sandbox",      // id
+                "user-001",             // userId — совпадает с UserRepository!
+                "Sandbox Account",      // name
+                domain::AccountType::SANDBOX,
+                "",                     // accessToken
+                true                    // active
+            );
+            save(sandbox);
+        }
+        {
+            domain::Account prod(
+                "acc-001-prod",
+                "user-001",
+                "Production Account",
+                domain::AccountType::PRODUCTION,
+                "",
+                true
+            );
+            save(prod);
+        }
+
+        // ----------------------------------------------------------------
+        // trader2 (user-002): 1 аккаунт — только sandbox
+        // Сценарий: начинающий трейдер
+        // ----------------------------------------------------------------
+        {
+            domain::Account sandbox(
+                "acc-002-sandbox",
+                "user-002",             // userId — совпадает с UserRepository!
+                "My Sandbox",
                 domain::AccountType::SANDBOX,
                 "",
                 true
             );
-            save(acc);
-            setActiveAccount("user-trader1", acc.id);
+            save(sandbox);
         }
 
-        // trader2
+        // ----------------------------------------------------------------
+        // newbie (user-003): 0 аккаунтов
+        // Сценарий: новый пользователь, тест "добавить первый аккаунт"
+        // ----------------------------------------------------------------
+        // Ничего не создаём!
+
+        // ----------------------------------------------------------------
+        // admin (user-004): 1 аккаунт — sandbox
+        // Сценарий: администратор для тестирования
+        // ----------------------------------------------------------------
         {
-            domain::Account acc(
-                "acc-trader2-sandbox",
-                "user-trader2",
-                "Sandbox Trader2",
+            domain::Account sandbox(
+                "acc-004-sandbox",
+                "user-004",             // userId — совпадает с UserRepository!
+                "Admin Sandbox",
                 domain::AccountType::SANDBOX,
                 "",
                 true
             );
-            save(acc);
-            setActiveAccount("user-trader2", acc.id);
+            save(sandbox);
         }
 
-        // admin
-        {
-            domain::Account acc(
-                "acc-admin-sandbox",
-                "user-admin",
-                "Sandbox Admin",
-                domain::AccountType::SANDBOX,
-                "",
-                true
-            );
-            save(acc);
-            setActiveAccount("user-admin", acc.id);
-        }
+        std::cout << "[InMemoryAccountRepository] Initialized 4 test accounts for 3 users" << std::endl;
+        std::cout << "  - user-001 (trader1): 2 accounts (sandbox + prod)" << std::endl;
+        std::cout << "  - user-002 (trader2): 1 account (sandbox)" << std::endl;
+        std::cout << "  - user-003 (newbie):  0 accounts" << std::endl;
+        std::cout << "  - user-004 (admin):   1 account (sandbox)" << std::endl;
     }
 };
 

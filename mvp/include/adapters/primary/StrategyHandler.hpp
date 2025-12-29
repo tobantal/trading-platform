@@ -1,9 +1,9 @@
+// include/adapters/primary/StrategyHandler.hpp
 #pragma once
 
 #include <IHttpHandler.hpp>
 #include "ports/input/IStrategyService.hpp"
 #include "ports/input/IAuthService.hpp"
-#include "ports/input/IAccountService.hpp"
 #include <nlohmann/json.hpp>
 #include <memory>
 #include <iostream>
@@ -21,44 +21,36 @@ namespace trading::adapters::primary {
  * - POST /api/v1/strategies/{id}/start
  * - POST /api/v1/strategies/{id}/stop
  * - DELETE /api/v1/strategies/{id}
+ * 
+ * Требует Access Token (содержит accountId).
  */
 class StrategyHandler : public IHttpHandler
 {
 public:
     StrategyHandler(
         std::shared_ptr<ports::input::IStrategyService> strategyService,
-        std::shared_ptr<ports::input::IAuthService> authService,
-        std::shared_ptr<ports::input::IAccountService> accountService
+        std::shared_ptr<ports::input::IAuthService> authService
     ) : strategyService_(std::move(strategyService))
       , authService_(std::move(authService))
-      , accountService_(std::move(accountService))
     {
         std::cout << "[StrategyHandler] Created" << std::endl;
     }
 
     void handle(IRequest& req, IResponse& res) override
     {
-        // Проверяем авторизацию
-        auto userId = extractUserId(req);
-        if (!userId) {
+        // Извлекаем accountId из access token
+        auto accountId = extractAccountId(req);
+        if (!accountId) {
             res.setStatus(401);
             res.setHeader("Content-Type", "application/json");
-            res.setBody(R"({"error": "Unauthorized"})");
-            return;
-        }
-
-        auto account = accountService_->getActiveAccount(*userId);
-        if (!account) {
-            res.setStatus(400);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(R"({"error": "No active account found"})");
+            res.setBody(R"({"error": "Access token required. Use POST /api/v1/auth/select-account to get one."})");
             return;
         }
 
         std::string method = req.getMethod();
         std::string path = req.getPath();
         
-        // Исправлено: точное определение endpoints с помощью регулярных выражений
+        // Точное определение endpoints с помощью регулярных выражений
         static const std::regex strategyIdRegex(R"(^/api/v1/strategies/([^/]+)$)");
         static const std::regex strategyStartRegex(R"(^/api/v1/strategies/([^/]+)/start$)");
         static const std::regex strategyStopRegex(R"(^/api/v1/strategies/([^/]+)/stop$)");
@@ -66,17 +58,17 @@ public:
         std::smatch matches;
         
         if (method == "POST" && path == "/api/v1/strategies") {
-            handleCreateStrategy(req, res, account->id);
+            handleCreateStrategy(req, res, *accountId);
         } else if (method == "GET" && path == "/api/v1/strategies") {
-            handleGetStrategies(req, res, account->id);
+            handleGetStrategies(req, res, *accountId);
         } else if (method == "GET" && std::regex_match(path, matches, strategyIdRegex)) {
-            handleGetStrategy(req, res, account->id, matches[1].str());
+            handleGetStrategy(req, res, *accountId, matches[1].str());
         } else if (method == "POST" && std::regex_match(path, matches, strategyStartRegex)) {
-            handleStartStrategy(req, res, account->id, matches[1].str());
+            handleStartStrategy(req, res, *accountId, matches[1].str());
         } else if (method == "POST" && std::regex_match(path, matches, strategyStopRegex)) {
-            handleStopStrategy(req, res, account->id, matches[1].str());
+            handleStopStrategy(req, res, *accountId, matches[1].str());
         } else if (method == "DELETE" && std::regex_match(path, matches, strategyIdRegex)) {
-            handleDeleteStrategy(req, res, account->id, matches[1].str());
+            handleDeleteStrategy(req, res, *accountId, matches[1].str());
         } else {
             res.setStatus(404);
             res.setHeader("Content-Type", "application/json");
@@ -87,7 +79,6 @@ public:
 private:
     std::shared_ptr<ports::input::IStrategyService> strategyService_;
     std::shared_ptr<ports::input::IAuthService> authService_;
-    std::shared_ptr<ports::input::IAccountService> accountService_;
 
     /**
      * @brief Обрабатывает запрос создания стратегии.
@@ -257,7 +248,6 @@ private:
                 return;
             }
 
-            // Исправлено: интерфейс IStrategyService требует только strategyId
             bool stopped = strategyService_->stopStrategy(strategyId);
             
             if (stopped) {
@@ -347,9 +337,9 @@ private:
     }
 
     /**
-     * @brief Извлекает userId из заголовков Authorization.
+     * @brief Извлекает accountId из access token
      */
-    std::optional<std::string> extractUserId(IRequest& req)
+    std::optional<std::string> extractAccountId(IRequest& req)
     {
         auto headers = req.getHeaders();
         auto it = headers.find("Authorization");
@@ -363,7 +353,7 @@ private:
         }
 
         std::string token = auth.substr(7);
-        return authService_->getUserIdFromToken(token);
+        return authService_->getAccountIdFromToken(token);
     }
 };
 

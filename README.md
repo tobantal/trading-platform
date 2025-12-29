@@ -412,11 +412,6 @@ public:
     // Получить список счетов пользователя
     virtual std::vector<Account> getUserAccounts(const std::string& userId) = 0;
     
-    // Выбрать активный счёт
-    virtual bool setActiveAccount(const std::string& userId, const std::string& accountId) = 0;
-    
-    // Получить активный счёт
-    virtual std::optional<Account> getActiveAccount(const std::string& userId) = 0;
 };
 ```
 

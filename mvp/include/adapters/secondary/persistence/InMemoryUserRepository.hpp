@@ -1,3 +1,4 @@
+// include/adapters/secondary/persistence/InMemoryUserRepository.hpp
 #pragma once
 
 #include "ports/output/IUserRepository.hpp"
@@ -6,6 +7,7 @@
 #include <random>
 #include <sstream>
 #include <iomanip>
+#include <iostream>
 
 namespace trading::adapters::secondary {
 
@@ -14,11 +16,20 @@ namespace trading::adapters::secondary {
  * 
  * Для MVP используем хранение в памяти.
  * В Education заменяется на PostgresUserRepository.
+ * 
+ * Тестовые пользователи:
+ * ┌────────────┬──────────┬────────────┬─────────────────────────────┐
+ * │ ID         │ Username │ Password   │ Сценарий                    │
+ * ├────────────┼──────────┼────────────┼─────────────────────────────┤
+ * │ user-001   │ trader1  │ password1  │ 2 аккаунта (sandbox + prod) │
+ * │ user-002   │ trader2  │ password2  │ 1 аккаунт (sandbox)         │
+ * │ user-003   │ newbie   │ password3  │ 0 аккаунтов (новичок)       │
+ * │ user-004   │ admin    │ admin123   │ 1 аккаунт (админ)           │
+ * └────────────┴──────────┴────────────┴─────────────────────────────┘
  */
 class InMemoryUserRepository : public ports::output::IUserRepository {
 public:
     InMemoryUserRepository() : rng_(std::random_device{}()) {
-        // Создаём тестовых пользователей
         initTestUsers();
     }
 
@@ -84,8 +95,6 @@ public:
 
     /**
      * @brief Получить или создать пользователя по username
-     * 
-     * Удобный метод для MVP - если пользователь не существует, создаём его.
      */
     domain::User getOrCreate(const std::string& username) {
         auto existing = findByUsername(username);
@@ -114,10 +123,24 @@ private:
     std::mt19937_64 rng_;
 
     void initTestUsers() {
-        // Тестовые пользователи для демо
-        save(domain::User("user-001", "trader1", "pas1"));
-        save(domain::User("user-002", "trader2", "pas2"));
-        save(domain::User("user-003", "admin", "secret123"));
+        // ================================================================
+        // ТЕСТОВЫЕ ПОЛЬЗОВАТЕЛИ
+        // ================================================================
+        // ID должны совпадать с InMemoryAccountRepository!
+        
+        // trader1: опытный трейдер с 2 аккаунтами
+        save(domain::User("user-001", "trader1", "password1"));
+        
+        // trader2: начинающий с 1 аккаунтом
+        save(domain::User("user-002", "trader2", "password2"));
+        
+        // newbie: новичок БЕЗ аккаунтов (для теста "добавить аккаунт")
+        save(domain::User("user-003", "newbie", "password3"));
+        
+        // admin: администратор
+        save(domain::User("user-004", "admin", "admin123"));
+
+        std::cout << "[InMemoryUserRepository] Initialized 4 test users" << std::endl;
     }
 
     std::string generateUuid() {

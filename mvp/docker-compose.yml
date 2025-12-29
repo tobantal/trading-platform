@@ -1,21 +1,33 @@
 version: '3.8'
 
 services:
+  # ===========================================
+  # Backend (Trading MVP)
+  # ===========================================
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: mvp/Dockerfile
     container_name: trading-mvp
     ports:
       - "8080:8080"
     volumes:
-      - ./config.json:/app/config.json:ro  
+      - ./config.json:/app/config.json:ro
     environment:
       - LOG_LEVEL=info
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=trading
+      - RABBITMQ_PASSWORD=trading123
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=trading
+      - POSTGRES_USER=trader
+      - POSTGRES_PASSWORD=password
     depends_on:
       postgres:
         condition: service_healthy
-      prometheus:
+      rabbitmq:
         condition: service_healthy
     networks:
       - trading
@@ -23,9 +35,12 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
       interval: 5s
       timeout: 3s
-      retries: 3
-      start_period: 10s
+      retries: 5
+      start_period: 30s
 
+  # ===========================================
+  # PostgreSQL
+  # ===========================================
   postgres:
     image: postgres:15-alpine
     container_name: trading-postgres
@@ -37,14 +52,42 @@ services:
       POSTGRES_PASSWORD: password
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - trading
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U trader -d trading"]
       interval: 5s
       timeout: 3s
-      retries: 3
+      retries: 5
 
+  # ===========================================
+  # RabbitMQ (Message Broker)
+  # ===========================================
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: trading-rabbitmq
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: trading
+      RABBITMQ_DEFAULT_PASS: trading123
+      RABBITMQ_DEFAULT_VHOST: trading
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - trading
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ===========================================
+  # Prometheus (Metrics)
+  # ===========================================
   prometheus:
     image: prom/prometheus:latest
     container_name: trading-prometheus
@@ -66,6 +109,30 @@ services:
       timeout: 3s
       retries: 3
 
+  # ===========================================
+  # Grafana (Dashboards)
+  # ===========================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: trading-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - trading
+
+  # ===========================================
+  # Nginx (API Gateway / Static files)
+  # ===========================================
   nginx:
     image: nginx:alpine
     container_name: trading-nginx
@@ -82,6 +149,8 @@ services:
 volumes:
   postgres_data:
   prometheus_data:
+  rabbitmq_data:
+  grafana_data:
 
 networks:
   trading:

@@ -1,5 +1,7 @@
 #include "TradingApp.hpp"
 
+#include <IEnvironment.hpp>
+
 // Auth Handlers (Primary Adapters)
 #include "adapters/primary/auth/LoginHandler.hpp"
 #include "adapters/primary/auth/SelectAccountHandler.hpp"
@@ -33,11 +35,19 @@
 #include "adapters/secondary/broker/FakeTinkoffAdapter.hpp"
 #include "adapters/secondary/auth/FakeJwtAdapter.hpp"
 #include "adapters/secondary/cache/LruCacheAdapter.hpp"
-#include "adapters/secondary/events/InMemoryEventBus.hpp"
+#include "adapters/secondary/events/RabbitMQEventBus.hpp"
+#include "adapters/secondary/settings/RabbitMQSettings.hpp"
 #include "adapters/secondary/persistence/InMemoryUserRepository.hpp"
 #include "adapters/secondary/persistence/InMemoryAccountRepository.hpp"
 #include "adapters/secondary/persistence/InMemoryOrderRepository.hpp"
 #include "adapters/secondary/persistence/InMemoryStrategyRepository.hpp"
+
+// Ports (Output)
+#include "ports/output/IRabbitMQSettings.hpp"
+
+// Domain Event Factory
+#include "domain/events/DomainEventFactory.hpp"
+#include "application/events/SimpleDomainEventFactory.hpp"
 
 #include <iostream>
 
@@ -86,19 +96,30 @@ void TradingApp::configureInjection()
     // ========================================================================
     // Boost.DI Injector Configuration
     // ========================================================================
-    //
-    // Биндинги организованы по слоям Hexagonal Architecture:
-    // 1. Output Ports → Secondary Adapters (инфраструктура)
-    // 2. Input Ports → Application Services (бизнес-логика)
-    //
-    // Все биндинги в singleton scope для сохранения состояния
-    // ========================================================================
 
     auto injector = di::make_injector(
 
         // ====================================================================
         // Layer 1: Secondary Adapters (Output Ports implementations)
         // ====================================================================
+
+        // IEnvironment
+        di::bind<IEnvironment>().to(env_),
+
+        // IRabbitMQSettings ← RabbitMQSettings(IEnvironment)
+        di::bind<trading::ports::output::IRabbitMQSettings>()
+            .to<trading::adapters::secondary::RabbitMQSettings>()
+            .in(di::singleton),
+
+        // DomainEventFactory ← SimpleDomainEventFactory (авторегистрация в конструкторе)
+        di::bind<trading::domain::DomainEventFactory>()
+            .to<trading::application::SimpleDomainEventFactory>()
+            .in(di::singleton),
+
+        // IEventBus ← RabbitMQEventBus(IRabbitMQSettings, DomainEventFactory)
+        di::bind<trading::ports::output::IEventBus>()
+            .to<trading::adapters::secondary::RabbitMQEventBus>()
+            .in(di::singleton),
 
         // Broker Gateway - подключение к бирже (fake для MVP)
         di::bind<trading::ports::output::IBrokerGateway>()
@@ -115,11 +136,6 @@ void TradingApp::configureInjection()
             .to(std::make_shared<trading::adapters::secondary::LruCacheAdapter>(
                 config::CACHE_CAPACITY,
                 config::CACHE_TTL_SECONDS)),
-
-        // Event Bus - внутренняя шина событий
-        di::bind<trading::ports::output::IEventBus>()
-            .to<trading::adapters::secondary::InMemoryEventBus>()
-            .in(di::singleton),
 
         // Repositories - in-memory хранилища
         di::bind<trading::ports::output::IUserRepository>()
@@ -173,18 +189,13 @@ void TradingApp::configureInjection()
     // ========================================================================
     // Layer 3: Primary Adapters (HTTP Handlers)
     // ========================================================================
-    //
-    // Handlers создаются через injector.create<>() - DI автоматически
-    // разрешает все зависимости из конструкторов
-    // ========================================================================
 
     std::cout << "\n🎮 Registering HTTP Handlers via DI..." << std::endl;
 
     // ========================================================================
-    // AUTH HANDLERS (5 хэндлеров) — НОВАЯ СТРУКТУРА
+    // AUTH HANDLERS
     // ========================================================================
     {
-        // POST /api/v1/auth/login
         auto loginHandler = injector.create<
             std::shared_ptr<trading::adapters::primary::LoginHandler>>();
         handlers_[getHandlerKey("POST", "/api/v1/auth/login")] = loginHandler;
@@ -192,7 +203,6 @@ void TradingApp::configureInjection()
     }
 
     {
-        // POST /api/v1/auth/select-account
         auto selectAccountHandler = injector.create<
             std::shared_ptr<trading::adapters::primary::SelectAccountHandler>>();
         handlers_[getHandlerKey("POST", "/api/v1/auth/select-account")] = selectAccountHandler;
@@ -200,7 +210,6 @@ void TradingApp::configureInjection()
     }
 
     {
-        // POST /api/v1/auth/validate
         auto validateHandler = injector.create<
             std::shared_ptr<trading::adapters::primary::ValidateTokenHandler>>();
         handlers_[getHandlerKey("POST", "/api/v1/auth/validate")] = validateHandler;
@@ -208,7 +217,6 @@ void TradingApp::configureInjection()
     }
 
     {
-        // POST /api/v1/auth/refresh
         auto refreshHandler = injector.create<
             std::shared_ptr<trading::adapters::primary::RefreshTokenHandler>>();
         handlers_[getHandlerKey("POST", "/api/v1/auth/refresh")] = refreshHandler;
@@ -216,20 +224,21 @@ void TradingApp::configureInjection()
     }
 
     {
-        // POST /api/v1/auth/logout
         auto logoutHandler = injector.create<
             std::shared_ptr<trading::adapters::primary::LogoutHandler>>();
         handlers_[getHandlerKey("POST", "/api/v1/auth/logout")] = logoutHandler;
         std::cout << "  ✓ LogoutHandler: POST /api/v1/auth/logout" << std::endl;
     }
 
-    // Auth - Register
     {
         auto handler = injector.create<std::shared_ptr<trading::adapters::primary::RegisterHandler>>();
         handlers_[getHandlerKey("POST", "/api/v1/auth/register")] = handler;
+        std::cout << "  ✓ RegisterHandler: POST /api/v1/auth/register" << std::endl;
     }
 
-    // Account handlers
+    // ========================================================================
+    // ACCOUNT HANDLERS
+    // ========================================================================
     {
         auto getHandler = injector.create<std::shared_ptr<trading::adapters::primary::GetAccountsHandler>>();
         handlers_[getHandlerKey("GET", "/api/v1/accounts")] = getHandler;
@@ -239,8 +248,14 @@ void TradingApp::configureInjection()
 
         auto deleteHandler = injector.create<std::shared_ptr<trading::adapters::primary::DeleteAccountHandler>>();
         handlers_[getHandlerKey("DELETE", "/api/v1/accounts/*")] = deleteHandler;
+        
+        std::cout << "  ✓ AccountHandlers: GET/POST/DELETE /api/v1/accounts" << std::endl;
     }
 
+    // ========================================================================
+    // BUSINESS HANDLERS
+    // ========================================================================
+    
     // Market Handler
     {
         auto handler = injector.create<std::shared_ptr<trading::adapters::primary::MarketHandler>>();
@@ -282,18 +297,22 @@ void TradingApp::configureInjection()
         std::cout << "  ✓ StrategyHandler: POST/GET/DELETE /api/v1/strategies" << std::endl;
     }
 
-    // Health Handler (без зависимостей)
+    // ========================================================================
+    // INFRASTRUCTURE HANDLERS
+    // ========================================================================
+    
+    // Health Handler
     {
         auto handler = injector.create<std::shared_ptr<trading::adapters::primary::HealthHandler>>();
         handlers_[getHandlerKey("GET", "/api/v1/health")] = handler;
         std::cout << "  ✓ HealthHandler: GET /api/v1/health" << std::endl;
     }
 
-    // Metrics Handler (без зависимостей)
+    // Metrics Handler — через DI, подписка на события в конструкторе
     {
         auto handler = injector.create<std::shared_ptr<trading::adapters::primary::MetricsHandler>>();
         handlers_[getHandlerKey("GET", "/metrics")] = handler;
-        std::cout << "  ✓ MetricsHandler: GET /metrics" << std::endl;
+        std::cout << "  ✓ MetricsHandler: GET /metrics (with EventBus via DI)" << std::endl;
     }
 
     std::cout << "\n[TradingApp] DI configuration completed - "

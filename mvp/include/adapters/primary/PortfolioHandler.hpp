@@ -1,9 +1,9 @@
+// include/adapters/primary/PortfolioHandler.hpp
 #pragma once
 
 #include <IHttpHandler.hpp>
 #include "ports/input/IPortfolioService.hpp"
 #include "ports/input/IAuthService.hpp"
-#include "ports/input/IAccountService.hpp"
 #include <nlohmann/json.hpp>
 #include <memory>
 #include <iostream>
@@ -17,49 +17,40 @@ namespace trading::adapters::primary {
  * - GET /api/v1/portfolio
  * - GET /api/v1/portfolio/positions
  * - GET /api/v1/portfolio/cash
+ * 
+ * Требует Access Token (содержит accountId).
  */
 class PortfolioHandler : public IHttpHandler
 {
 public:
     PortfolioHandler(
         std::shared_ptr<ports::input::IPortfolioService> portfolioService,
-        std::shared_ptr<ports::input::IAuthService> authService,
-        std::shared_ptr<ports::input::IAccountService> accountService
+        std::shared_ptr<ports::input::IAuthService> authService
     ) : portfolioService_(std::move(portfolioService))
       , authService_(std::move(authService))
-      , accountService_(std::move(accountService))
     {
         std::cout << "[PortfolioHandler] Created" << std::endl;
     }
 
     void handle(IRequest& req, IResponse& res) override
     {
-        // Проверяем авторизацию
-        auto userId = extractUserId(req);
-        if (!userId) {
+        // Извлекаем accountId из access token
+        auto accountId = extractAccountId(req);
+        if (!accountId) {
             res.setStatus(401);
             res.setHeader("Content-Type", "application/json");
-            res.setBody(R"({"error": "Unauthorized"})");
-            return;
-        }
-
-        // Получаем активный счёт
-        auto account = accountService_->getActiveAccount(*userId);//FIXME: плохой подход, выпилить
-        if (!account) {
-            res.setStatus(400);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(R"({"error": "No active account found"})");
+            res.setBody(R"({"error": "Access token required. Use POST /api/v1/auth/select-account to get one."})");
             return;
         }
 
         std::string path = req.getPath();
         
         if (path == "/api/v1/portfolio") {
-            handleGetPortfolio(req, res, account->id);
+            handleGetPortfolio(req, res, *accountId);
         } else if (path == "/api/v1/portfolio/positions") {
-            handleGetPositions(req, res, account->id);
+            handleGetPositions(req, res, *accountId);
         } else if (path == "/api/v1/portfolio/cash") {
-            handleGetCash(req, res, account->id);
+            handleGetCash(req, res, *accountId);
         } else {
             res.setStatus(404);
             res.setHeader("Content-Type", "application/json");
@@ -70,7 +61,6 @@ public:
 private:
     std::shared_ptr<ports::input::IPortfolioService> portfolioService_;
     std::shared_ptr<ports::input::IAuthService> authService_;
-    std::shared_ptr<ports::input::IAccountService> accountService_;
 
     /**
      * @brief Обрабатывает запрос получения полного портфеля.
@@ -169,9 +159,9 @@ private:
     }
 
     /**
-     * @brief Извлекает userId из заголовков Authorization.
+     * @brief Извлекает accountId из access token
      */
-    std::optional<std::string> extractUserId(IRequest& req)
+    std::optional<std::string> extractAccountId(IRequest& req)
     {
         auto headers = req.getHeaders();
         auto it = headers.find("Authorization");
@@ -185,7 +175,7 @@ private:
         }
 
         std::string token = auth.substr(7);
-        return authService_->getUserIdFromToken(token);
+        return authService_->getAccountIdFromToken(token);
     }
 };
 

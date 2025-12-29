@@ -58,26 +58,6 @@ public:
     }
 
     /**
-     * @brief Установить активный счёт для пользователя
-     */
-    bool setActiveAccount(const std::string& userId, const std::string& accountId) override {
-        auto account = accountRepository_->findById(accountId);
-        if (!account || account->userId != userId) {
-            return false;
-        }
-        
-        accountRepository_->setActiveAccount(userId, accountId);
-        return true;
-    }
-
-    /**
-     * @brief Получить активный счёт пользователя
-     */
-    std::optional<domain::Account> getActiveAccount(const std::string& userId) override {
-        return accountRepository_->findActiveByUserId(userId);
-    }
-
-    /**
      * @brief Удалить счёт
      */
     bool deleteAccount(const std::string& accountId) override {

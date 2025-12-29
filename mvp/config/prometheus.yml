@@ -2,9 +2,42 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Alertmanager configuration (опционально)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
 scrape_configs:
+  # ===========================================
+  # Trading MVP Backend
+  # ===========================================
   - job_name: 'trading-mvp'
     static_configs:
       - targets: ['backend:8080']
     metrics_path: '/metrics'
     scrape_interval: 5s
+
+  # ===========================================
+  # Prometheus self-monitoring
+  # ===========================================
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ===========================================
+  # RabbitMQ (через management plugin)
+  # Требует включения prometheus plugin в RabbitMQ
+  # ===========================================
+  # - job_name: 'rabbitmq'
+  #   static_configs:
+  #     - targets: ['rabbitmq:15692']
+  #   metrics_path: '/metrics'
+
+  # ===========================================
+  # PostgreSQL (требует postgres_exporter)
+  # ===========================================
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']

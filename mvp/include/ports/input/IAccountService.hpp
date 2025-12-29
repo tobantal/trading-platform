@@ -47,23 +47,6 @@ public:
     virtual std::optional<domain::Account> getAccountById(const std::string& accountId) = 0;
 
     /**
-     * @brief Установить активный счёт для пользователя
-     * 
-     * @param userId ID пользователя
-     * @param accountId ID счёта для активации
-     * @return true если успешно
-     */
-    virtual bool setActiveAccount(const std::string& userId, const std::string& accountId) = 0;
-
-    /**
-     * @brief Получить активный счёт пользователя
-     * 
-     * @param userId ID пользователя
-     * @return Активный Account или nullopt
-     */
-    virtual std::optional<domain::Account> getActiveAccount(const std::string& userId) = 0;
-
-    /**
      * @brief Удалить счёт
      * 
      * @param accountId ID счёта
