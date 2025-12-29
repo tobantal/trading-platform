@@ -1,3 +1,4 @@
+// include/adapters/secondary/broker/FakeTinkoffAdapter.hpp
 #pragma once
 
 #include "ports/output/IBrokerGateway.hpp"
@@ -9,6 +10,19 @@
 
 namespace trading::adapters::secondary {
 
+/**
+ * @brief Фейковый адаптер для Tinkoff API
+ * 
+ * Используется для тестирования без реального брокера.
+ * При создании автоматически регистрирует тестовые аккаунты,
+ * совместимые с InMemoryAccountRepository.
+ * 
+ * Тестовые аккаунты:
+ * - acc-001-sandbox (trader1): 1,000,000 RUB
+ * - acc-001-prod (trader1): 500,000 RUB  
+ * - acc-002-sandbox (trader2): 100,000 RUB
+ * - acc-004-sandbox (admin): 10,000,000 RUB
+ */
 class FakeTinkoffAdapter : public ports::output::IBrokerGateway {
 public:
     FakeTinkoffAdapter();
@@ -61,6 +75,7 @@ private:
     domain::Money generatePrice(const std::string& figi);
     std::string generateUuid();
     void initInstruments();
+    void initTestAccounts();
     
     std::shared_ptr<AccountData> getOrCreateAccount(const std::string& accountId);
     std::shared_ptr<AccountData> getAccount(const std::string& accountId);

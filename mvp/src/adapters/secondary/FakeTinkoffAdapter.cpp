@@ -1,8 +1,10 @@
+// src/adapters/secondary/FakeTinkoffAdapter.cpp
 #include "adapters/secondary/broker/FakeTinkoffAdapter.hpp"
 #include <algorithm>
 #include <sstream>
 #include <iomanip>
 #include <chrono>
+#include <iostream>
 
 namespace trading::adapters::secondary {
 
@@ -10,6 +12,7 @@ FakeTinkoffAdapter::FakeTinkoffAdapter()
     : rng_(std::random_device{}()) 
 {
     initInstruments();
+    initTestAccounts();
 }
 
 void FakeTinkoffAdapter::initInstruments() {
@@ -27,6 +30,45 @@ void FakeTinkoffAdapter::initInstruments() {
 
     instruments_["BBG006L8G4H1"] = domain::Instrument("BBG006L8G4H1", "YNDX", "Яндекс", "RUB", 1);
     basePrices_["BBG006L8G4H1"] = 3500.0;
+}
+
+// ============================================================================
+// Инициализация тестовых аккаунтов
+// ============================================================================
+// ID аккаунтов ДОЛЖНЫ совпадать с InMemoryAccountRepository!
+// ============================================================================
+void FakeTinkoffAdapter::initTestAccounts() {
+    // ----------------------------------------------------------------
+    // trader1 (user-001): 2 аккаунта — sandbox + production
+    // ----------------------------------------------------------------
+    registerAccount("acc-001-sandbox", "fake-token-001-sandbox");
+    setCash("acc-001-sandbox", domain::Money::fromDouble(1000000.0, "RUB"));
+    
+    registerAccount("acc-001-prod", "fake-token-001-prod");
+    setCash("acc-001-prod", domain::Money::fromDouble(500000.0, "RUB"));
+
+    // ----------------------------------------------------------------
+    // trader2 (user-002): 1 аккаунт — только sandbox
+    // ----------------------------------------------------------------
+    registerAccount("acc-002-sandbox", "fake-token-002-sandbox");
+    setCash("acc-002-sandbox", domain::Money::fromDouble(100000.0, "RUB"));
+
+    // ----------------------------------------------------------------
+    // newbie (user-003): 0 аккаунтов — для теста "добавить аккаунт"
+    // ----------------------------------------------------------------
+    // (ничего не регистрируем)
+
+    // ----------------------------------------------------------------
+    // admin (user-004): 1 аккаунт — sandbox
+    // ----------------------------------------------------------------
+    registerAccount("acc-004-sandbox", "fake-token-004-sandbox");
+    setCash("acc-004-sandbox", domain::Money::fromDouble(10000000.0, "RUB"));
+
+    std::cout << "[FakeTinkoffAdapter] Initialized 4 test accounts:" << std::endl;
+    std::cout << "  - acc-001-sandbox (trader1): 1,000,000 RUB" << std::endl;
+    std::cout << "  - acc-001-prod    (trader1): 500,000 RUB" << std::endl;
+    std::cout << "  - acc-002-sandbox (trader2): 100,000 RUB" << std::endl;
+    std::cout << "  - acc-004-sandbox (admin):   10,000,000 RUB" << std::endl;
 }
 
 domain::Money FakeTinkoffAdapter::generatePrice(const std::string& figi) {
@@ -199,22 +241,19 @@ void FakeTinkoffAdapter::executeOrder(AccountData& account, const domain::Order&
         auto existing = account.positions.find(order.figi);
         if (existing) {
             int64_t newQty = existing->quantity - order.quantity;
-            if (newQty > 0) {
+            if (newQty <= 0) {
+                account.positions.remove(order.figi);
+            } else {
                 auto updated = std::make_shared<domain::Position>(*existing);
                 updated->quantity = newQty;
                 updated->updateCurrentPrice(order.price);
                 account.positions.insert(order.figi, updated);
-            } else {
-                account.positions.remove(order.figi);
             }
         }
     }
 }
 
-domain::OrderResult FakeTinkoffAdapter::placeOrder(
-    const std::string& accountId,
-    const domain::OrderRequest& request
-) {
+domain::OrderResult FakeTinkoffAdapter::placeOrder(const std::string& accountId, const domain::OrderRequest& request) {
     auto account = getAccount(accountId);
     if (!account) {
         domain::OrderResult result;
@@ -223,58 +262,89 @@ domain::OrderResult FakeTinkoffAdapter::placeOrder(
         return result;
     }
     
-    domain::OrderResult result;
-    result.timestamp = domain::Timestamp::now();
-    
     auto instrument = getInstrumentByFigi(request.figi);
     if (!instrument) {
+        domain::OrderResult result;
         result.status = domain::OrderStatus::REJECTED;
-        result.message = "Unknown instrument: " + request.figi;
+        result.message = "Instrument not found: " + request.figi;
         return result;
     }
     
-    auto quote = getQuote(request.figi);
-    if (!quote) {
-        result.status = domain::OrderStatus::REJECTED;
-        result.message = "Cannot get quote";
-        return result;
-    }
+    domain::Money price = (request.type == domain::OrderType::MARKET)
+        ? generatePrice(request.figi)
+        : request.price;
     
-    domain::Money execPrice = (request.type == domain::OrderType::MARKET) 
-        ? quote->lastPrice : request.price;
-    domain::Money totalCost = execPrice * (request.quantity * instrument->lot);
+    domain::Money totalCost = price * (request.quantity * instrument->lot);
     
-    if (request.direction == domain::OrderDirection::BUY && totalCost > account->cash) {
-        result.status = domain::OrderStatus::REJECTED;
-        result.message = "Insufficient funds";
-        return result;
-    }
-    
-    if (request.direction == domain::OrderDirection::SELL) {
+    // Проверка средств для покупки
+    if (request.direction == domain::OrderDirection::BUY) {
+        if (account->cash.toDouble() < totalCost.toDouble()) {
+            domain::OrderResult result;
+            result.status = domain::OrderStatus::REJECTED;
+            result.message = "Insufficient funds";
+            return result;
+        }
+    } else {
+        // Проверка позиции для продажи
         auto pos = account->positions.find(request.figi);
         if (!pos || pos->quantity < request.quantity) {
+            domain::OrderResult result;
             result.status = domain::OrderStatus::REJECTED;
             result.message = "Insufficient position";
             return result;
         }
     }
     
-    std::string orderId = generateUuid();
-    domain::Order order(orderId, request.accountId, request.figi, 
-                        request.direction, request.type, request.quantity, execPrice);
-    
-    if (request.type == domain::OrderType::MARKET) {
-        order.updateStatus(domain::OrderStatus::FILLED);
-        executeOrder(*account, order, *instrument);
-        result.executedPrice = execPrice;
-    } else {
-        order.updateStatus(domain::OrderStatus::PENDING);
+    // Для лимитных ордеров - ставим в pending
+    if (request.type == domain::OrderType::LIMIT) {
+        std::string orderId = generateUuid();
+        
+        domain::Order order;
+        order.id = orderId;
+        order.accountId = accountId;
+        order.figi = request.figi;
+        order.direction = request.direction;
+        order.type = request.type;
+        order.quantity = request.quantity;
+        order.price = request.price;
+        order.status = domain::OrderStatus::PENDING;
+        order.createdAt = domain::Timestamp::now();
+        order.updatedAt = domain::Timestamp::now();
+        
+        account->orders.insert(orderId, std::make_shared<domain::Order>(order));
+        
+        domain::OrderResult result;
+        result.orderId = orderId;
+        result.status = domain::OrderStatus::PENDING;
+        result.message = "Limit order placed";
+        result.timestamp = domain::Timestamp::now();
+        return result;
     }
     
+    // Market ордер - исполняем сразу
+    std::string orderId = generateUuid();
+    
+    domain::Order order;
+    order.id = orderId;
+    order.accountId = accountId;
+    order.figi = request.figi;
+    order.direction = request.direction;
+    order.type = request.type;
+    order.quantity = request.quantity;
+    order.price = price;
+    order.status = domain::OrderStatus::FILLED;
+    order.createdAt = domain::Timestamp::now();
+    order.updatedAt = domain::Timestamp::now();
+    
+    executeOrder(*account, order, *instrument);
     account->orders.insert(orderId, std::make_shared<domain::Order>(order));
+    
+    domain::OrderResult result;
     result.orderId = orderId;
-    result.status = order.status;
-    result.message = "OK";
+    result.status = domain::OrderStatus::FILLED;
+    result.executedPrice = price;
+    result.message = "Order filled";
+    result.timestamp = domain::Timestamp::now();
     return result;
 }
 
@@ -290,8 +360,10 @@ bool FakeTinkoffAdapter::cancelOrder(const std::string& accountId, const std::st
     }
     
     auto updated = std::make_shared<domain::Order>(*order);
-    updated->updateStatus(domain::OrderStatus::CANCELLED);
+    updated->status = domain::OrderStatus::CANCELLED;
+    updated->updatedAt = domain::Timestamp::now();
     account->orders.insert(orderId, updated);
+    
     return true;
 }
 
@@ -311,10 +383,10 @@ std::vector<domain::Order> FakeTinkoffAdapter::getOrders(const std::string& acco
         return {};
     }
     
-    auto all = account->orders.getAll();
     std::vector<domain::Order> result;
-    for (const auto& o : all) {
-        result.push_back(*o);
+    auto allOrders = account->orders.getAll();
+    for (const auto& order : allOrders) {
+        result.push_back(*order);
     }
     return result;
 }
@@ -322,38 +394,35 @@ std::vector<domain::Order> FakeTinkoffAdapter::getOrders(const std::string& acco
 std::vector<domain::Order> FakeTinkoffAdapter::getOrderHistory(
     const std::string& accountId,
     const std::optional<std::chrono::system_clock::time_point>& from,
-    const std::optional<std::chrono::system_clock::time_point>& to
-) {
-    auto account = getAccount(accountId);
-    if (!account) {
-        return {};
-    }
-    
-    // Упрощенная реализация - возвращаем все ордера
+    const std::optional<std::chrono::system_clock::time_point>& to) 
+{
+    // Для простоты возвращаем все ордера (фильтрация по времени не реализована)
     return getOrders(accountId);
 }
 
 void FakeTinkoffAdapter::reset() {
-    std::lock_guard<std::mutex> lock(accountsMutex_);
-    accounts_.clear();
-    initInstruments();
+    {
+        std::lock_guard<std::mutex> lock(accountsMutex_);
+        accounts_.clear();
+    }
+     initInstruments();
+     initTestAccounts();
 }
 
 void FakeTinkoffAdapter::setCash(const std::string& accountId, const domain::Money& cash) {
     auto account = getAccount(accountId);
-    if (!account) {
-        return;
+    if (account) {
+        account->cash = cash;
     }
-    
-    account->cash = cash;
 }
 
 void FakeTinkoffAdapter::setPositions(const std::string& accountId, const std::vector<domain::Position>& positions) {
-    auto account = getOrCreateAccount(accountId);
-    
-    account->positions.clear();
-    for (const auto& pos : positions) {
-        account->positions.insert(pos.figi, std::make_shared<domain::Position>(pos));
+    auto account = getAccount(accountId);
+    if (account) {
+        account->positions.clear();
+        for (const auto& pos : positions) {
+            account->positions.insert(pos.figi, std::make_shared<domain::Position>(pos));
+        }
     }
 }
 
