@@ -5,7 +5,7 @@
 #include "adapters/primary/PortfolioHandler.hpp"
 #include "application/PortfolioService.hpp"
 #include "application/AuthService.hpp"
-#include "adapters/secondary/broker/FakeTinkoffAdapter.hpp"
+#include "adapters/secondary/broker/SimpleBrokerGatewayAdapter.hpp"
 #include "adapters/secondary/auth/FakeJwtAdapter.hpp"
 #include "adapters/secondary/persistence/InMemoryAccountRepository.hpp"
 #include "adapters/secondary/persistence/InMemoryUserRepository.hpp"
@@ -27,7 +27,7 @@ class PortfolioHandlerTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Создаем зависимости для сервисов
-        broker_ = std::make_shared<FakeTinkoffAdapter>();
+        broker_ = std::make_shared<SimpleBrokerGatewayAdapter>();
         jwtAdapter_ = std::make_shared<FakeJwtAdapter>();
         accountRepository_ = std::make_shared<InMemoryAccountRepository>();
         userRepository_ = std::make_shared<InMemoryUserRepository>();
@@ -108,7 +108,7 @@ protected:
     }
     
     std::unique_ptr<PortfolioHandler> portfolioHandler_;
-    std::shared_ptr<FakeTinkoffAdapter> broker_;
+    std::shared_ptr<SimpleBrokerGatewayAdapter> broker_;
     std::shared_ptr<FakeJwtAdapter> jwtAdapter_;
     std::shared_ptr<InMemoryAccountRepository> accountRepository_;
     std::shared_ptr<InMemoryUserRepository> userRepository_;

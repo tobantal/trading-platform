@@ -5,7 +5,7 @@
 #include "adapters/primary/OrderHandler.hpp"
 #include "application/OrderService.hpp"
 #include "application/AuthService.hpp"
-#include "adapters/secondary/broker/FakeTinkoffAdapter.hpp"
+#include "adapters/secondary/broker/SimpleBrokerGatewayAdapter.hpp"
 #include "adapters/secondary/events/InMemoryEventBus.hpp"
 #include "adapters/secondary/auth/FakeJwtAdapter.hpp"
 #include "adapters/secondary/persistence/InMemoryOrderRepository.hpp"
@@ -30,7 +30,7 @@ class OrderHandlerTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Создаем зависимости для сервисов
-        broker_ = std::make_shared<FakeTinkoffAdapter>();
+        broker_ = std::make_shared<SimpleBrokerGatewayAdapter>();
         eventBus_ = std::make_shared<InMemoryEventBus>();
         jwtAdapter_ = std::make_shared<FakeJwtAdapter>();
         orderRepository_ = std::make_shared<InMemoryOrderRepository>();
@@ -134,7 +134,7 @@ protected:
     }
     
     std::unique_ptr<OrderHandler> orderHandler_;
-    std::shared_ptr<FakeTinkoffAdapter> broker_;
+    std::shared_ptr<SimpleBrokerGatewayAdapter> broker_;
     std::shared_ptr<InMemoryEventBus> eventBus_;
     std::shared_ptr<FakeJwtAdapter> jwtAdapter_;
     std::shared_ptr<InMemoryOrderRepository> orderRepository_;

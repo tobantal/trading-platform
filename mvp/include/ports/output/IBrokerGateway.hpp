@@ -25,7 +25,7 @@ namespace trading::ports::output {
  * 3. Все методы работают в контексте конкретного аккаунта
  * 
  * Реализации:
- * - FakeTinkoffAdapter (MVP) - эмуляция без реального API
+ * - SimpleBrokerGatewayAdapter (MVP) - эмуляция без реального API
  * - TinkoffGrpcAdapter (Production) - реальный gRPC
  */
 class IBrokerGateway {

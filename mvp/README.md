@@ -92,7 +92,7 @@
 
 ## 2.3 Fake Tinkoff API
 
-Для MVP создаём **FakeTinkoffAdapter** который:
+Для MVP создаём **SimpleBrokerGatewayAdapter** который:
 - Эмулирует поведение реального API
 - Возвращает захардкоженные/рандомные котировки
 - Позволяет тестировать логику без реального брокера
@@ -556,7 +556,7 @@ public:
 ### External Service Adapters
 | Adapter | Порт (Output) | Описание |
 |---------|---------------|----------|
-| `FakeTinkoffAdapter` | IBrokerGateway | **MVP**: Эмуляция Tinkoff API |
+| `SimpleBrokerGatewayAdapter` | IBrokerGateway | **MVP**: Эмуляция Tinkoff API |
 | `TinkoffGrpcAdapter` | IBrokerGateway | **Production**: Реальный gRPC |
 | `FakeJwtAdapter` | IJwtProvider | Интеграция с fake-jwt-server |
 | `LruCacheAdapter` | ICache | Обёртка над cpp-cache |
@@ -1071,7 +1071,7 @@ mvp/
 │   │   │
 │   │   └── secondary/
 │   │       ├── broker/
-│   │       │   └── FakeTinkoffAdapter.hpp
+│   │       │   └── SimpleBrokerGatewayAdapter.hpp
 │   │       ├── persistence/
 │   │       │   ├── PostgresUserRepository.hpp
 │   │       │   ├── PostgresAccountRepository.hpp
@@ -1136,7 +1136,7 @@ mvp/
 | 5 | 🐘 PostgreSQL с миграциями и справочниками | ⬜ |
 | 6 | 📊 Prometheus метрики | ⬜ |
 | 7 | 🐳 Docker Compose работает | ⬜ |
-| 8 | 🧪 FakeTinkoffAdapter реализован | ⬜ |
+| 8 | 🧪 SimpleBrokerGatewayAdapter реализован | ⬜ |
 | 9 | 🔐 fake-jwt-server интегрирован | ⬜ |
 | 10 | 📨 InMemoryEventBus работает | ⬜ |
 

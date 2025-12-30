@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "adapters/secondary/broker/OrderProcessor.hpp"
+#include <set>
 #include <thread>
 #include <vector>
 

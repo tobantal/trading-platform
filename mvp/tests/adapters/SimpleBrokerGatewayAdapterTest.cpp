@@ -1,13 +1,13 @@
 #include <gtest/gtest.h>
-#include "adapters/secondary/broker/FakeTinkoffAdapter.hpp"
+#include "adapters/secondary/broker/SimpleBrokerGatewayAdapter.hpp"
 
 using namespace trading::adapters::secondary;
 using namespace trading::domain;
 
-class FakeTinkoffAdapterTest : public ::testing::Test {
+class SimpleBrokerGatewayAdapterTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        adapter = std::make_unique<FakeTinkoffAdapter>();
+        adapter = std::make_unique<SimpleBrokerGatewayAdapter>();
         adapter->registerAccount(TEST_ACCOUNT_ID, "test-token");
     }
 
@@ -15,7 +15,7 @@ protected:
         adapter->reset();
     }
 
-    std::unique_ptr<FakeTinkoffAdapter> adapter;
+    std::unique_ptr<SimpleBrokerGatewayAdapter> adapter;
     
     const std::string TEST_ACCOUNT_ID = "test-account";
     const std::string SBER_FIGI = "BBG004730N88";
@@ -24,49 +24,49 @@ protected:
 };
 
 // Инструменты
-TEST_F(FakeTinkoffAdapterTest, GetAllInstruments_ReturnsFive) {
+TEST_F(SimpleBrokerGatewayAdapterTest, GetAllInstruments_ReturnsFive) {
     auto instruments = adapter->getAllInstruments();
     EXPECT_EQ(instruments.size(), 5);
 }
 
-TEST_F(FakeTinkoffAdapterTest, GetInstrumentByFigi_Found) {
+TEST_F(SimpleBrokerGatewayAdapterTest, GetInstrumentByFigi_Found) {
     auto instr = adapter->getInstrumentByFigi(SBER_FIGI);
     ASSERT_TRUE(instr.has_value());
     EXPECT_EQ(instr->ticker, "SBER");
     EXPECT_EQ(instr->lot, 10);
 }
 
-TEST_F(FakeTinkoffAdapterTest, GetInstrumentByFigi_NotFound) {
+TEST_F(SimpleBrokerGatewayAdapterTest, GetInstrumentByFigi_NotFound) {
     auto instr = adapter->getInstrumentByFigi(UNKNOWN_FIGI);
     EXPECT_FALSE(instr.has_value());
 }
 
 // Котировки
-TEST_F(FakeTinkoffAdapterTest, GetQuote_ValidFigi) {
+TEST_F(SimpleBrokerGatewayAdapterTest, GetQuote_ValidFigi) {
     auto quote = adapter->getQuote(SBER_FIGI);
     ASSERT_TRUE(quote.has_value());
     EXPECT_EQ(quote->figi, SBER_FIGI);
     EXPECT_EQ(quote->ticker, "SBER");
 }
 
-TEST_F(FakeTinkoffAdapterTest, GetQuote_InvalidFigi) {
+TEST_F(SimpleBrokerGatewayAdapterTest, GetQuote_InvalidFigi) {
     auto quote = adapter->getQuote(UNKNOWN_FIGI);
     EXPECT_FALSE(quote.has_value());
 }
 
 // Портфель
-TEST_F(FakeTinkoffAdapterTest, GetPortfolio_Initial) {
+TEST_F(SimpleBrokerGatewayAdapterTest, GetPortfolio_Initial) {
     auto portfolio = adapter->getPortfolio(TEST_ACCOUNT_ID);
     EXPECT_DOUBLE_EQ(portfolio.cash.toDouble(), 1000000.0);
     EXPECT_TRUE(portfolio.positions.empty());
 }
 
-TEST_F(FakeTinkoffAdapterTest, GetPortfolio_AccountNotFound) {
+TEST_F(SimpleBrokerGatewayAdapterTest, GetPortfolio_AccountNotFound) {
     EXPECT_THROW(adapter->getPortfolio("non-existent"), std::runtime_error);
 }
 
 // Ордера
-TEST_F(FakeTinkoffAdapterTest, PlaceOrder_MarketBuy_Success) {
+TEST_F(SimpleBrokerGatewayAdapterTest, PlaceOrder_MarketBuy_Success) {
     OrderRequest req;
     req.accountId = TEST_ACCOUNT_ID;
     req.figi = SBER_FIGI;
@@ -79,7 +79,7 @@ TEST_F(FakeTinkoffAdapterTest, PlaceOrder_MarketBuy_Success) {
     EXPECT_FALSE(result.orderId.empty());
 }
 
-TEST_F(FakeTinkoffAdapterTest, PlaceOrder_MarketBuy_InsufficientFunds) {
+TEST_F(SimpleBrokerGatewayAdapterTest, PlaceOrder_MarketBuy_InsufficientFunds) {
     adapter->setCash(TEST_ACCOUNT_ID, Money::fromDouble(100.0, "RUB"));
     
     OrderRequest req;
@@ -93,7 +93,7 @@ TEST_F(FakeTinkoffAdapterTest, PlaceOrder_MarketBuy_InsufficientFunds) {
     EXPECT_EQ(result.status, OrderStatus::REJECTED);
 }
 
-TEST_F(FakeTinkoffAdapterTest, PlaceOrder_LimitBuy_Pending) {
+TEST_F(SimpleBrokerGatewayAdapterTest, PlaceOrder_LimitBuy_Pending) {
     OrderRequest req;
     req.accountId = TEST_ACCOUNT_ID;
     req.figi = SBER_FIGI;
@@ -106,7 +106,7 @@ TEST_F(FakeTinkoffAdapterTest, PlaceOrder_LimitBuy_Pending) {
     EXPECT_EQ(result.status, OrderStatus::PENDING);
 }
 
-TEST_F(FakeTinkoffAdapterTest, PlaceOrder_AccountNotFound) {
+TEST_F(SimpleBrokerGatewayAdapterTest, PlaceOrder_AccountNotFound) {
     OrderRequest req;
     req.accountId = "non-existent";
     req.figi = SBER_FIGI;
@@ -119,7 +119,7 @@ TEST_F(FakeTinkoffAdapterTest, PlaceOrder_AccountNotFound) {
 }
 
 // Отмена ордеров
-TEST_F(FakeTinkoffAdapterTest, CancelOrder_Pending_Success) {
+TEST_F(SimpleBrokerGatewayAdapterTest, CancelOrder_Pending_Success) {
     OrderRequest req;
     req.accountId = TEST_ACCOUNT_ID;
     req.figi = SBER_FIGI;
@@ -133,7 +133,7 @@ TEST_F(FakeTinkoffAdapterTest, CancelOrder_Pending_Success) {
     EXPECT_TRUE(cancelled);
 }
 
-TEST_F(FakeTinkoffAdapterTest, CancelOrder_Filled_Fails) {
+TEST_F(SimpleBrokerGatewayAdapterTest, CancelOrder_Filled_Fails) {
     OrderRequest req;
     req.accountId = TEST_ACCOUNT_ID;
     req.figi = SBER_FIGI;
@@ -147,7 +147,7 @@ TEST_F(FakeTinkoffAdapterTest, CancelOrder_Filled_Fails) {
 }
 
 // Получение ордеров
-TEST_F(FakeTinkoffAdapterTest, GetOrderStatus_Found) {
+TEST_F(SimpleBrokerGatewayAdapterTest, GetOrderStatus_Found) {
     OrderRequest req;
     req.accountId = TEST_ACCOUNT_ID;
     req.figi = SBER_FIGI;
@@ -161,7 +161,7 @@ TEST_F(FakeTinkoffAdapterTest, GetOrderStatus_Found) {
     EXPECT_EQ(order->id, result.orderId);
 }
 
-TEST_F(FakeTinkoffAdapterTest, GetOrders_ReturnsAll) {
+TEST_F(SimpleBrokerGatewayAdapterTest, GetOrders_ReturnsAll) {
     for (int i = 0; i < 3; i++) {
         OrderRequest req;
         req.accountId = TEST_ACCOUNT_ID;
@@ -177,7 +177,7 @@ TEST_F(FakeTinkoffAdapterTest, GetOrders_ReturnsAll) {
 }
 
 // Несколько аккаунтов
-TEST_F(FakeTinkoffAdapterTest, MultipleAccounts_Isolated) {
+TEST_F(SimpleBrokerGatewayAdapterTest, MultipleAccounts_Isolated) {
     const std::string ACCOUNT1 = "account-1";
     const std::string ACCOUNT2 = "account-2";
     

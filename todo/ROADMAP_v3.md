@@ -325,7 +325,7 @@ TEST(OrderSaga, IdempotentEventHandling) {
 | # | Задача | Время |
 |---|--------|-------|
 | 2.1 | Создать структуру broker-service/ | 30 мин |
-| 2.2 | Перенести FakeTinkoffAdapter | 1 час |
+| 2.2 | Перенести SimpleBrokerGatewayAdapter | 1 час |
 | 2.3 | REST endpoints: /quotes, /instruments, /broker/execute | 2 часа |
 | 2.4 | Publish events: OrderExecuted, QuoteUpdated | 1 час |
 
@@ -435,6 +435,8 @@ TEST(OrderSaga, IdempotentEventHandling) {
 1.8 Prometheus: проверить scraping 30 мин (done)
 
 1.9 PostgreSQL: схемы + репозитории 3-4 часа (done)
+
+1.10 EnchancedFakeBroker: продвинутая иммитация брокера (done)
 
 ### День 2: Распил на микросервисы (~10-12 часов)
 

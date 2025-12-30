@@ -32,7 +32,7 @@
 #include "application/StrategyService.hpp"
 
 // Secondary Adapters
-#include "adapters/secondary/broker/FakeTinkoffAdapter.hpp"
+#include "adapters/secondary/broker/SimpleBrokerGatewayAdapter.hpp"
 #include "adapters/secondary/auth/FakeJwtAdapter.hpp"
 #include "adapters/secondary/cache/LruCacheAdapter.hpp"
 #include "adapters/secondary/events/RabbitMQEventBus.hpp"
@@ -123,7 +123,7 @@ void TradingApp::configureInjection()
 
         // Broker Gateway - подключение к бирже (fake для MVP)
         di::bind<trading::ports::output::IBrokerGateway>()
-            .to<trading::adapters::secondary::FakeTinkoffAdapter>()
+            .to<trading::adapters::secondary::SimpleBrokerGatewayAdapter>()
             .in(di::singleton),
 
         // JWT Provider - аутентификация (fake для MVP)

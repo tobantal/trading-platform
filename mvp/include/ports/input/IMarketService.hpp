@@ -57,7 +57,7 @@ public:
      * 
      * @return Список инструментов
      * 
-     * @note В FakeTinkoffAdapter возвращает 5 захардкоженных инструментов
+     * @note В SimpleBrokerGatewayAdapter возвращает 5 захардкоженных инструментов
      */
     virtual std::vector<domain::Instrument> getAllInstruments() = 0;
 };

@@ -2,7 +2,7 @@
 
 #include "adapters/primary/MarketHandler.hpp"
 #include "application/MarketService.hpp"
-#include "adapters/secondary/broker/FakeTinkoffAdapter.hpp"
+#include "adapters/secondary/broker/SimpleBrokerGatewayAdapter.hpp"
 #include "adapters/secondary/cache/LruCacheAdapter.hpp"
 #include "adapters/secondary/events/InMemoryEventBus.hpp"
 
@@ -24,7 +24,7 @@ protected:
     void SetUp() override
     {
         // Создаем реальные зависимости для MarketService
-        auto broker = std::make_shared<FakeTinkoffAdapter>();
+        auto broker = std::make_shared<SimpleBrokerGatewayAdapter>();
         auto cache = std::make_shared<LruCacheAdapter>(1000, 5); // capacity=1000, ttl=5s
         auto eventBus = std::make_shared<InMemoryEventBus>();
 
@@ -82,7 +82,7 @@ protected:
     }
 
     std::unique_ptr<MarketHandler> marketHandler;
-    std::shared_ptr<FakeTinkoffAdapter> broker;
+    std::shared_ptr<SimpleBrokerGatewayAdapter> broker;
     std::shared_ptr<LruCacheAdapter> cache;
     std::shared_ptr<InMemoryEventBus> eventBus;
 };
@@ -110,7 +110,7 @@ TEST_F(MarketHandlerTest, GetQuotes_NoParameters_ReturnsAllQuotes)
 
     auto json = parseJsonResponse(res);
     EXPECT_TRUE(json.is_array());
-    // FakeTinkoffAdapter содержит 5 инструментов по умолчанию
+    // SimpleBrokerGatewayAdapter содержит 5 инструментов по умолчанию
     EXPECT_GE(json.size(), 5);
 
     // Проверяем структуру первого элемента
@@ -218,7 +218,7 @@ TEST_F(MarketHandlerTest, GetInstruments_ReturnsAllInstruments)
 
     auto json = parseJsonResponse(res);
     EXPECT_TRUE(json.is_array());
-    // FakeTinkoffAdapter содержит 5 инструментов
+    // SimpleBrokerGatewayAdapter содержит 5 инструментов
     EXPECT_EQ(json.size(), 5);
 
     // Проверяем структуру первого инструмента
@@ -491,7 +491,7 @@ TEST_F(MarketHandlerTest, Caching_WorksCorrectly)
     // Проверяем, что данные совпадают (в рамках точности double)
     EXPECT_EQ(json1[0]["figi"], json2[0]["figi"]);
     EXPECT_EQ(json1[0]["ticker"], json2[0]["ticker"]);
-    // Цены могут немного отличаться из-за генерации в FakeTinkoffAdapter,
+    // Цены могут немного отличаться из-за генерации в SimpleBrokerGatewayAdapter,
     // но для теста кэширования это нормально
 }
 

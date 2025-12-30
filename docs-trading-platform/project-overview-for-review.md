@@ -109,7 +109,7 @@
 **Что реализуем:**
 - Гексагональная архитектура (Ports & Adapters)
 - JWT авторизация через fake-jwt-server
-- FakeTinkoffAdapter (эмуляция брокера без реального API)
+- SimpleBrokerGatewayAdapter (эмуляция брокера без реального API)
 - Торговля акциями (5 инструментов: SBER, LKOH, GAZP, VTBR, YNDX)
 - Одна стратегия: SMA Crossover
 - In-memory Event Bus
@@ -319,7 +319,7 @@
 | 3 | PostgreSQL с миграциями |
 | 4 | Prometheus метрики |
 | 5 | Docker Compose запускается одной командой |
-| 6 | FakeTinkoffAdapter для тестирования |
+| 6 | SimpleBrokerGatewayAdapter для тестирования |
 
 ## Демонстрация
 

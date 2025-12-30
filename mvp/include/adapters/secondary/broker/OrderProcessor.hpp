@@ -99,6 +99,7 @@ struct OrderFillEvent {
     std::string orderId;
     std::string accountId;
     std::string figi;
+    Direction direction;
     int64_t quantity;
     double price;
     bool partial;
@@ -472,6 +473,7 @@ private:
             event.orderId = order.orderId;
             event.accountId = order.accountId;
             event.figi = order.figi;
+            event.direction = order.direction;
             event.quantity = order.quantity;
             event.price = fillPrice;
             event.partial = partial;

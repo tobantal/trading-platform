@@ -106,7 +106,7 @@ open http://localhost:3001                # ✅ работает
 
 **Задачи:**
 ```
-[Done] FakeTinkoffAdapter (IBrokerGateway):
+[Done] SimpleBrokerGatewayAdapter (IBrokerGateway):
   └─ 5 инструментов (SBER, LKOH, GAZP, VTBR, YNDX)
   └─ getQuote() — базовая цена ± 5%
   └─ getPortfolio() — in-memory позиции
@@ -259,7 +259,7 @@ FIXME: Стоит подумать над созданием однотипны�
 | 3 | Boost.DI | ⬜ |
 | 4 | PostgreSQL + миграции | ⬜ |
 | 5 | fake-jwt-server | ⬜ |
-| 6 | FakeTinkoffAdapter | ⬜ |
+| 6 | SimpleBrokerGatewayAdapter | ⬜ |
 | 7 | InMemoryEventBus | ⬜ |
 | 8 | Prometheus метрики | ⬜ |
 | 9 | Docker Compose | ⬜ |
@@ -435,7 +435,7 @@ FIXME: добавить обязательно мониторинг (Prometeus, 
   • REST endpoints работают
   • PostgreSQL с данными
   • Docker Compose запускается
-  • FakeTinkoffAdapter
+  • SimpleBrokerGatewayAdapter
   • fake-jwt-server
 ```
 

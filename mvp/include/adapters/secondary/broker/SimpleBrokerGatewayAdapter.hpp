@@ -1,4 +1,4 @@
-// include/adapters/secondary/broker/FakeTinkoffAdapter.hpp
+// include/adapters/secondary/broker/SimpleBrokerGatewayAdapter.hpp
 #pragma once
 
 #include "ports/output/IBrokerGateway.hpp"
@@ -11,7 +11,7 @@
 namespace trading::adapters::secondary {
 
 /**
- * @brief Фейковый адаптер для Tinkoff API
+ * @brief Простой фейковый адаптер IBrokerGateway для тестов
  * 
  * Используется для тестирования без реального брокера.
  * При создании автоматически регистрирует тестовые аккаунты,
@@ -23,10 +23,10 @@ namespace trading::adapters::secondary {
  * - acc-002-sandbox (trader2): 100,000 RUB
  * - acc-004-sandbox (admin): 10,000,000 RUB
  */
-class FakeTinkoffAdapter : public ports::output::IBrokerGateway {
+class SimpleBrokerGatewayAdapter : public ports::output::IBrokerGateway {
 public:
-    FakeTinkoffAdapter();
-    ~FakeTinkoffAdapter() override = default;
+    SimpleBrokerGatewayAdapter();
+    ~SimpleBrokerGatewayAdapter() override = default;
 
     // Конфигурация аккаунтов
     void registerAccount(const std::string& accountId, const std::string& accessToken) override;

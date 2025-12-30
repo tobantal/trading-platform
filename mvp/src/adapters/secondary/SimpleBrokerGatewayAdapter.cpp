@@ -1,5 +1,5 @@
-// src/adapters/secondary/FakeTinkoffAdapter.cpp
-#include "adapters/secondary/broker/FakeTinkoffAdapter.hpp"
+// src/adapters/secondary/SimpleBrokerGatewayAdapter.cpp
+#include "adapters/secondary/broker/SimpleBrokerGatewayAdapter.hpp"
 #include <algorithm>
 #include <sstream>
 #include <iomanip>
@@ -8,14 +8,14 @@
 
 namespace trading::adapters::secondary {
 
-FakeTinkoffAdapter::FakeTinkoffAdapter() 
+SimpleBrokerGatewayAdapter::SimpleBrokerGatewayAdapter() 
     : rng_(std::random_device{}()) 
 {
     initInstruments();
     initTestAccounts();
 }
 
-void FakeTinkoffAdapter::initInstruments() {
+void SimpleBrokerGatewayAdapter::initInstruments() {
     instruments_["BBG004730N88"] = domain::Instrument("BBG004730N88", "SBER", "Сбербанк", "RUB", 10);
     basePrices_["BBG004730N88"] = 265.0;
 
@@ -37,7 +37,7 @@ void FakeTinkoffAdapter::initInstruments() {
 // ============================================================================
 // ID аккаунтов ДОЛЖНЫ совпадать с InMemoryAccountRepository!
 // ============================================================================
-void FakeTinkoffAdapter::initTestAccounts() {
+void SimpleBrokerGatewayAdapter::initTestAccounts() {
     // ----------------------------------------------------------------
     // trader1 (user-001): 2 аккаунта — sandbox + production
     // ----------------------------------------------------------------
@@ -64,14 +64,14 @@ void FakeTinkoffAdapter::initTestAccounts() {
     registerAccount("acc-004-sandbox", "fake-token-004-sandbox");
     setCash("acc-004-sandbox", domain::Money::fromDouble(10000000.0, "RUB"));
 
-    std::cout << "[FakeTinkoffAdapter] Initialized 4 test accounts:" << std::endl;
+    std::cout << "[SimpleBrokerGatewayAdapter] Initialized 4 test accounts:" << std::endl;
     std::cout << "  - acc-001-sandbox (trader1): 1,000,000 RUB" << std::endl;
     std::cout << "  - acc-001-prod    (trader1): 500,000 RUB" << std::endl;
     std::cout << "  - acc-002-sandbox (trader2): 100,000 RUB" << std::endl;
     std::cout << "  - acc-004-sandbox (admin):   10,000,000 RUB" << std::endl;
 }
 
-domain::Money FakeTinkoffAdapter::generatePrice(const std::string& figi) {
+domain::Money SimpleBrokerGatewayAdapter::generatePrice(const std::string& figi) {
     auto it = basePrices_.find(figi);
     if (it == basePrices_.end()) {
         return domain::Money();
@@ -84,7 +84,7 @@ domain::Money FakeTinkoffAdapter::generatePrice(const std::string& figi) {
     return domain::Money::fromDouble(price, "RUB");
 }
 
-std::string FakeTinkoffAdapter::generateUuid() {
+std::string SimpleBrokerGatewayAdapter::generateUuid() {
     std::lock_guard<std::mutex> lock(rngMutex_);
     std::uniform_int_distribution<uint64_t> dist;
     
@@ -99,7 +99,7 @@ std::string FakeTinkoffAdapter::generateUuid() {
     return ss.str();
 }
 
-std::shared_ptr<FakeTinkoffAdapter::AccountData> FakeTinkoffAdapter::getOrCreateAccount(const std::string& accountId) {
+std::shared_ptr<SimpleBrokerGatewayAdapter::AccountData> SimpleBrokerGatewayAdapter::getOrCreateAccount(const std::string& accountId) {
     std::lock_guard<std::mutex> lock(accountsMutex_);
     
     auto it = accounts_.find(accountId);
@@ -112,25 +112,25 @@ std::shared_ptr<FakeTinkoffAdapter::AccountData> FakeTinkoffAdapter::getOrCreate
     return it->second;
 }
 
-std::shared_ptr<FakeTinkoffAdapter::AccountData> FakeTinkoffAdapter::getAccount(const std::string& accountId) {
+std::shared_ptr<SimpleBrokerGatewayAdapter::AccountData> SimpleBrokerGatewayAdapter::getAccount(const std::string& accountId) {
     std::lock_guard<std::mutex> lock(accountsMutex_);
     auto it = accounts_.find(accountId);
     return it != accounts_.end() ? it->second : nullptr;
 }
 
-void FakeTinkoffAdapter::registerAccount(const std::string& accountId, const std::string& accessToken) {
+void SimpleBrokerGatewayAdapter::registerAccount(const std::string& accountId, const std::string& accessToken) {
     std::lock_guard<std::mutex> lock(accountsMutex_);
     
     auto account = std::make_shared<AccountData>(accessToken);
     accounts_[accountId] = account;
 }
 
-void FakeTinkoffAdapter::unregisterAccount(const std::string& accountId) {
+void SimpleBrokerGatewayAdapter::unregisterAccount(const std::string& accountId) {
     std::lock_guard<std::mutex> lock(accountsMutex_);
     accounts_.erase(accountId);
 }
 
-std::optional<domain::Quote> FakeTinkoffAdapter::getQuote(const std::string& figi) {
+std::optional<domain::Quote> SimpleBrokerGatewayAdapter::getQuote(const std::string& figi) {
     auto it = instruments_.find(figi);
     if (it == instruments_.end()) {
         return std::nullopt;
@@ -142,7 +142,7 @@ std::optional<domain::Quote> FakeTinkoffAdapter::getQuote(const std::string& fig
     return domain::Quote(figi, it->second.ticker, lastPrice, lastPrice - spread, lastPrice + spread);
 }
 
-std::vector<domain::Quote> FakeTinkoffAdapter::getQuotes(const std::vector<std::string>& figis) {
+std::vector<domain::Quote> SimpleBrokerGatewayAdapter::getQuotes(const std::vector<std::string>& figis) {
     std::vector<domain::Quote> result;
     for (const auto& figi : figis) {
         if (auto quote = getQuote(figi)) {
@@ -152,7 +152,7 @@ std::vector<domain::Quote> FakeTinkoffAdapter::getQuotes(const std::vector<std::
     return result;
 }
 
-std::vector<domain::Instrument> FakeTinkoffAdapter::searchInstruments(const std::string& query) {
+std::vector<domain::Instrument> SimpleBrokerGatewayAdapter::searchInstruments(const std::string& query) {
     std::vector<domain::Instrument> result;
     std::string q = query;
     std::transform(q.begin(), q.end(), q.begin(), ::tolower);
@@ -170,12 +170,12 @@ std::vector<domain::Instrument> FakeTinkoffAdapter::searchInstruments(const std:
     return result;
 }
 
-std::optional<domain::Instrument> FakeTinkoffAdapter::getInstrumentByFigi(const std::string& figi) {
+std::optional<domain::Instrument> SimpleBrokerGatewayAdapter::getInstrumentByFigi(const std::string& figi) {
     auto it = instruments_.find(figi);
     return it != instruments_.end() ? std::optional(it->second) : std::nullopt;
 }
 
-std::vector<domain::Instrument> FakeTinkoffAdapter::getAllInstruments() {
+std::vector<domain::Instrument> SimpleBrokerGatewayAdapter::getAllInstruments() {
     std::vector<domain::Instrument> result;
     for (const auto& [figi, instr] : instruments_) {
         result.push_back(instr);
@@ -183,7 +183,7 @@ std::vector<domain::Instrument> FakeTinkoffAdapter::getAllInstruments() {
     return result;
 }
 
-void FakeTinkoffAdapter::updatePortfolioPrices(domain::Portfolio& portfolio) {
+void SimpleBrokerGatewayAdapter::updatePortfolioPrices(domain::Portfolio& portfolio) {
     for (auto& pos : portfolio.positions) {
         if (auto quote = getQuote(pos.figi)) {
             pos.updateCurrentPrice(quote->lastPrice);
@@ -192,7 +192,7 @@ void FakeTinkoffAdapter::updatePortfolioPrices(domain::Portfolio& portfolio) {
     portfolio.recalculateTotalValue();
 }
 
-domain::Portfolio FakeTinkoffAdapter::getPortfolio(const std::string& accountId) {
+domain::Portfolio SimpleBrokerGatewayAdapter::getPortfolio(const std::string& accountId) {
     auto account = getAccount(accountId);
     if (!account) {
         throw std::runtime_error("Account not found: " + accountId);
@@ -211,7 +211,7 @@ domain::Portfolio FakeTinkoffAdapter::getPortfolio(const std::string& accountId)
     return portfolio;
 }
 
-void FakeTinkoffAdapter::executeOrder(AccountData& account, const domain::Order& order, const domain::Instrument& instrument) {
+void SimpleBrokerGatewayAdapter::executeOrder(AccountData& account, const domain::Order& order, const domain::Instrument& instrument) {
     domain::Money totalCost = order.price * (order.quantity * instrument.lot);
     
     if (order.direction == domain::OrderDirection::BUY) {
@@ -253,7 +253,7 @@ void FakeTinkoffAdapter::executeOrder(AccountData& account, const domain::Order&
     }
 }
 
-domain::OrderResult FakeTinkoffAdapter::placeOrder(const std::string& accountId, const domain::OrderRequest& request) {
+domain::OrderResult SimpleBrokerGatewayAdapter::placeOrder(const std::string& accountId, const domain::OrderRequest& request) {
     auto account = getAccount(accountId);
     if (!account) {
         domain::OrderResult result;
@@ -348,7 +348,7 @@ domain::OrderResult FakeTinkoffAdapter::placeOrder(const std::string& accountId,
     return result;
 }
 
-bool FakeTinkoffAdapter::cancelOrder(const std::string& accountId, const std::string& orderId) {
+bool SimpleBrokerGatewayAdapter::cancelOrder(const std::string& accountId, const std::string& orderId) {
     auto account = getAccount(accountId);
     if (!account) {
         return false;
@@ -367,7 +367,7 @@ bool FakeTinkoffAdapter::cancelOrder(const std::string& accountId, const std::st
     return true;
 }
 
-std::optional<domain::Order> FakeTinkoffAdapter::getOrderStatus(const std::string& accountId, const std::string& orderId) {
+std::optional<domain::Order> SimpleBrokerGatewayAdapter::getOrderStatus(const std::string& accountId, const std::string& orderId) {
     auto account = getAccount(accountId);
     if (!account) {
         return std::nullopt;
@@ -377,7 +377,7 @@ std::optional<domain::Order> FakeTinkoffAdapter::getOrderStatus(const std::strin
     return order ? std::optional(*order) : std::nullopt;
 }
 
-std::vector<domain::Order> FakeTinkoffAdapter::getOrders(const std::string& accountId) {
+std::vector<domain::Order> SimpleBrokerGatewayAdapter::getOrders(const std::string& accountId) {
     auto account = getAccount(accountId);
     if (!account) {
         return {};
@@ -391,7 +391,7 @@ std::vector<domain::Order> FakeTinkoffAdapter::getOrders(const std::string& acco
     return result;
 }
 
-std::vector<domain::Order> FakeTinkoffAdapter::getOrderHistory(
+std::vector<domain::Order> SimpleBrokerGatewayAdapter::getOrderHistory(
     const std::string& accountId,
     const std::optional<std::chrono::system_clock::time_point>& from,
     const std::optional<std::chrono::system_clock::time_point>& to) 
@@ -400,7 +400,7 @@ std::vector<domain::Order> FakeTinkoffAdapter::getOrderHistory(
     return getOrders(accountId);
 }
 
-void FakeTinkoffAdapter::reset() {
+void SimpleBrokerGatewayAdapter::reset() {
     {
         std::lock_guard<std::mutex> lock(accountsMutex_);
         accounts_.clear();
@@ -409,14 +409,14 @@ void FakeTinkoffAdapter::reset() {
      initTestAccounts();
 }
 
-void FakeTinkoffAdapter::setCash(const std::string& accountId, const domain::Money& cash) {
+void SimpleBrokerGatewayAdapter::setCash(const std::string& accountId, const domain::Money& cash) {
     auto account = getAccount(accountId);
     if (account) {
         account->cash = cash;
     }
 }
 
-void FakeTinkoffAdapter::setPositions(const std::string& accountId, const std::vector<domain::Position>& positions) {
+void SimpleBrokerGatewayAdapter::setPositions(const std::string& accountId, const std::vector<domain::Position>& positions) {
     auto account = getAccount(accountId);
     if (account) {
         account->positions.clear();
