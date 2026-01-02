@@ -1,0 +1,937 @@
+{
+  "info": {
+    "name": "Broker Service",
+    "description": "API tests for Broker Service - Trading Platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://arch.homework/broker",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & Metrics",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has status healthy', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql('healthy');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Prometheus Metrics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response contains metrics', function () {",
+                  "    pm.expect(pm.response.text()).to.include('http_requests_total');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/metrics",
+              "host": ["{{base_url}}"],
+              "path": ["metrics"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Instruments",
+      "item": [
+        {
+          "name": "Get All Instruments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is array', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Contains SBER instrument', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    var sber = jsonData.find(i => i.ticker === 'SBER');",
+                  "    pm.expect(sber).to.not.be.undefined;",
+                  "    pm.expect(sber.figi).to.eql('BBG004730N88');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/instruments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "instruments"]
+            }
+          }
+        },
+        {
+          "name": "Get SBER Instrument",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Correct instrument returned', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.figi).to.eql('BBG004730N88');",
+                  "    pm.expect(jsonData.ticker).to.eql('SBER');",
+                  "    pm.expect(jsonData.name).to.eql('Sberbank');",
+                  "    pm.expect(jsonData.currency).to.eql('RUB');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/instruments/BBG004730N88",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "instruments", "BBG004730N88"]
+            }
+          }
+        },
+        {
+          "name": "Get GAZP Instrument",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Correct instrument returned', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.ticker).to.eql('GAZP');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/instruments/BBG004730RP0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "instruments", "BBG004730RP0"]
+            }
+          }
+        },
+        {
+          "name": "Get Non-Existent Instrument",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/instruments/INVALID_FIGI",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "instruments", "INVALID_FIGI"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Quotes",
+      "item": [
+        {
+          "name": "Get SBER Quote",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Quote has required fields', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.figi).to.eql('BBG004730N88');",
+                  "    pm.expect(jsonData).to.have.property('bid_price');",
+                  "    pm.expect(jsonData).to.have.property('ask_price');",
+                  "    pm.expect(jsonData).to.have.property('last_price');",
+                  "});",
+                  "",
+                  "pm.test('Bid < Ask (spread)', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    var bid = jsonData.bid_price.units + jsonData.bid_price.nano / 1e9;",
+                  "    var ask = jsonData.ask_price.units + jsonData.ask_price.nano / 1e9;",
+                  "    pm.expect(bid).to.be.below(ask);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/quotes?figi=BBG004730N88",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "quotes"],
+              "query": [
+                {
+                  "key": "figi",
+                  "value": "BBG004730N88"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get LKOH Quote",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('LKOH quote correct', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.figi).to.eql('BBG004731032');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/quotes?figi=BBG004731032",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "quotes"],
+              "query": [
+                {
+                  "key": "figi",
+                  "value": "BBG004731032"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Quote - Missing FIGI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/quotes",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "quotes"]
+            }
+          }
+        },
+        {
+          "name": "Get Quote - Invalid FIGI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/quotes?figi=INVALID",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "quotes"],
+              "query": [
+                {
+                  "key": "figi",
+                  "value": "INVALID"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Place Market Buy Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Order created', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('order_id');",
+                  "    pm.expect(jsonData.status).to.be.oneOf(['NEW', 'FILLED']);",
+                  "    pm.collectionVariables.set('order_id', jsonData.order_id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": \"acc-001-sandbox\",\n  \"figi\": \"BBG004730N88\",\n  \"quantity\": 10,\n  \"direction\": \"BUY\",\n  \"order_type\": \"MARKET\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Place Limit Buy Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Order created', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('order_id');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": \"acc-001-sandbox\",\n  \"figi\": \"BBG004730N88\",\n  \"quantity\": 5,\n  \"direction\": \"BUY\",\n  \"order_type\": \"LIMIT\",\n  \"price\": {\n    \"units\": 260,\n    \"nano\": 0,\n    \"currency\": \"RUB\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Place Sell Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201 or 400', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 400]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": \"acc-001-sandbox\",\n  \"figi\": \"BBG004730N88\",\n  \"quantity\": 5,\n  \"direction\": \"SELL\",\n  \"order_type\": \"MARKET\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Get Orders List",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is array', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders?account_id=acc-001-sandbox",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders"],
+              "query": [
+                {
+                  "key": "account_id",
+                  "value": "acc-001-sandbox"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Order by ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 404', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders/{{order_id}}?account_id=acc-001-sandbox",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders", "{{order_id}}"],
+              "query": [
+                {
+                  "key": "account_id",
+                  "value": "acc-001-sandbox"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Cancel Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 404', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders/{{order_id}}?account_id=acc-001-sandbox",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders", "{{order_id}}"],
+              "query": [
+                {
+                  "key": "account_id",
+                  "value": "acc-001-sandbox"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Order - Invalid Account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400 or 404', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([400, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": \"invalid-account\",\n  \"figi\": \"BBG004730N88\",\n  \"quantity\": 10,\n  \"direction\": \"BUY\",\n  \"order_type\": \"MARKET\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Portfolio",
+      "item": [
+        {
+          "name": "Get Portfolio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Portfolio has required fields', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('account_id');",
+                  "    pm.expect(jsonData).to.have.property('cash');",
+                  "    pm.expect(jsonData).to.have.property('positions');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/portfolio?account_id=acc-001-sandbox",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "portfolio"],
+              "query": [
+                {
+                  "key": "account_id",
+                  "value": "acc-001-sandbox"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Positions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response is array', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/portfolio/positions?account_id=acc-001-sandbox",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "portfolio", "positions"],
+              "query": [
+                {
+                  "key": "account_id",
+                  "value": "acc-001-sandbox"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Cash Balance",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Cash has required fields', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('units');",
+                  "    pm.expect(jsonData).to.have.property('currency');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/portfolio/cash?account_id=acc-001-sandbox",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "portfolio", "cash"],
+              "query": [
+                {
+                  "key": "account_id",
+                  "value": "acc-001-sandbox"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Portfolio - Invalid Account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/portfolio?account_id=invalid-account",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "portfolio"],
+              "query": [
+                {
+                  "key": "account_id",
+                  "value": "invalid-account"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "E2E Trading Flow",
+      "item": [
+        {
+          "name": "1. Check Portfolio Before",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('initial_cash', jsonData.cash.units);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/portfolio?account_id=acc-001-sandbox",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "portfolio"],
+              "query": [
+                {
+                  "key": "account_id",
+                  "value": "acc-001-sandbox"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2. Get Quote",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "var price = jsonData.ask_price.units + jsonData.ask_price.nano / 1e9;",
+                  "pm.collectionVariables.set('current_price', price);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/quotes?figi=BBG004730N88",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "quotes"],
+              "query": [
+                {
+                  "key": "figi",
+                  "value": "BBG004730N88"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "3. Place Buy Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('trade_order_id', jsonData.order_id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": \"acc-001-sandbox\",\n  \"figi\": \"BBG004730N88\",\n  \"quantity\": 10,\n  \"direction\": \"BUY\",\n  \"order_type\": \"MARKET\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "4. Check Portfolio After",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Cash decreased after buy', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    var initialCash = pm.collectionVariables.get('initial_cash');",
+                  "    pm.expect(jsonData.cash.units).to.be.below(initialCash);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/portfolio?account_id=acc-001-sandbox",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "portfolio"],
+              "query": [
+                {
+                  "key": "account_id",
+                  "value": "acc-001-sandbox"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "5. Check Position Created",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Position exists', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    var sberPosition = jsonData.find(p => p.figi === 'BBG004730N88');",
+                  "    pm.expect(sberPosition).to.not.be.undefined;",
+                  "    pm.expect(sberPosition.quantity).to.be.above(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/portfolio/positions?account_id=acc-001-sandbox",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "portfolio", "positions"],
+              "query": [
+                {
+                  "key": "account_id",
+                  "value": "acc-001-sandbox"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

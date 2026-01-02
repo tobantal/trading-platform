@@ -55,6 +55,21 @@ set(BUILD_DOC OFF CACHE BOOL "" FORCE)
 set(BUILD_TEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(libpqxx)
 
+# OpenSSL (требуется для AMQP-CPP TCP)
+find_package(OpenSSL REQUIRED)
+
+# AMQP-CPP (RabbitMQ client)
+message(STATUS "Fetching AMQP-CPP...")
+FetchContent_Declare(
+    amqpcpp
+    GIT_REPOSITORY https://github.com/CopernicaMarketingSoftware/AMQP-CPP.git
+    GIT_TAG v4.3.26
+)
+# КРИТИЧНО: включить TCP поддержку
+set(AMQP-CPP_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(AMQP-CPP_LINUX_TCP ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(amqpcpp)
+
 # ============================================
 # GOOGLE TEST (for testing)
 # ============================================
