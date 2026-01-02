@@ -20,3 +20,6 @@ add_subdirectory(common)
 
 # проект MVP - минимальный реально работающий проект торговой платформы
 add_subdirectory(mvp)
+
+# Проект education - то, что будет на защите
+add_subdirectory(education)

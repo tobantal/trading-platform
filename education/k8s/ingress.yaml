@@ -1,0 +1,48 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: trading-ingress
+  namespace: trading
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: arch.homework
+      http:
+        paths:
+          # Auth Service: /auth/api/v1/... → /api/v1/...
+          - path: /auth(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 8081
+
+          # Trading Service: /trading/api/v1/... → /api/v1/...
+          - path: /trading(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: trading-service
+                port:
+                  number: 8082
+
+          # Broker Service: /broker/api/v1/... → /api/v1/...
+          - path: /broker(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: broker-service
+                port:
+                  number: 8083
+
+          # RabbitMQ Management UI
+          - path: /rabbitmq(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: rabbitmq
+                port:
+                  number: 15672

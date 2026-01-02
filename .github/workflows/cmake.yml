@@ -12,70 +12,21 @@ jobs:
     
     steps:
     - name: 🔄 Checkout
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
+      uses: actions/checkout@v3
       
     - name: 🛠 Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake g++ gcovr libboost-all-dev
+      run: sudo apt-get update && sudo apt-get install -y cmake g++ gcovr
       
     - name: 🏗 Configure with coverage
-      run: |
-        cmake -B build \
-          -DCMAKE_BUILD_TYPE=Debug \
-          -DBUILD_TESTS=ON \
-          -DCMAKE_CXX_FLAGS="--coverage -g -O0 -fprofile-arcs -ftest-coverage"
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="--coverage -g -O0"
       
     - name: ⚙️ Build
-      run: cmake --build build -j$(nproc)
+      run: cmake --build build
       
-    - name: 📋 Find test executables
-      run: |
-        echo "=== Build directory structure ==="
-        find build -name "mvp_tests" -type f 2>/dev/null || echo "mvp_tests not found by name"
-        echo ""
-        echo "=== Looking for test executables ==="
-        find build -name "*tests" -type f -executable 2>/dev/null | head -20
-        echo ""
-        echo "=== MVP subdirectory ==="
-        ls -la build/mvp/ 2>/dev/null || echo "build/mvp/ not found"
-
-    - name: 🧪 List available tests
-      run: |
-        # Ищем mvp_tests в разных местах
-        if [ -f build/mvp/mvp_tests ]; then
-          TEST_EXECUTABLE=build/mvp/mvp_tests
-        elif [ -f build/mvp_tests ]; then
-          TEST_EXECUTABLE=build/mvp_tests
-        else
-          echo "ERROR: Cannot find mvp_tests executable!"
-          find build -name "*test*" -type f -executable 2>/dev/null
-          exit 1
-        fi
-        
-        echo "Found test executable: $TEST_EXECUTABLE"
-        echo "=== Available tests ==="
-        ./$TEST_EXECUTABLE --gtest_list_tests || true
-      
-    - name: ✅ Run MVP tests
-      run: |
-        # Ищем mvp_tests в разных местах
-        if [ -f build/mvp/mvp_tests ]; then
-          TEST_EXECUTABLE=build/mvp/mvp_tests
-        elif [ -f build/mvp_tests ]; then
-          TEST_EXECUTABLE=build/mvp_tests
-        else
-          echo "ERROR: Cannot find mvp_tests executable!"
-          exit 1
-        fi
-        
-        echo "Running: $TEST_EXECUTABLE"
-        ./$TEST_EXECUTABLE --gtest_output=xml:build/test_results.xml
+    - name: ✅ Run tests
+      run: ctest --test-dir build --output-on-failure --verbose
       
     - name: 📊 Generate HTML coverage report
-      if: always()
       run: |
         gcovr \
           --root . \
@@ -83,26 +34,16 @@ jobs:
           --exclude '.*CompilerIdCXX.*' \
           --exclude '.*CompilerIdC.*' \
           --exclude '.*cmake/.*' \
-          --exclude '.*tests/.*' \
+          --exclude '.*/tests/.*' \
           --exclude '.*_deps/.*' \
-          --exclude '.*demo/.*' \
-          --exclude '.*benchmarks/.*' \
+          --exclude '.*/demo/.*' \
           --gcov-ignore-parse-errors=all \
           --html-details coverage.html \
-          --print-summary || true
+          --print-summary
               
-    - name: 📤 Upload test results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: test-results
-        path: build/test_results.xml
-
     - name: 📤 Upload coverage report
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: coverage-report-html
         path: coverage*.html
-
-  

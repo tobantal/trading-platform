@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-postgres-init
+  namespace: trading
+data:
+  init.sql: |
+    CREATE TABLE IF NOT EXISTS users (
+        user_id VARCHAR(64) PRIMARY KEY,
+        username VARCHAR(64) UNIQUE NOT NULL,
+        email VARCHAR(128) UNIQUE NOT NULL,
+        password_hash VARCHAR(256) NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS accounts (
+        account_id VARCHAR(64) PRIMARY KEY,
+        user_id VARCHAR(64) REFERENCES users(user_id),
+        name VARCHAR(64) NOT NULL,
+        type VARCHAR(16) NOT NULL,
+        tinkoff_token_encrypted TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+        session_id VARCHAR(64) PRIMARY KEY,
+        user_id VARCHAR(64) REFERENCES users(user_id),
+        jwt_token VARCHAR(512) NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_accounts_user_id ON accounts(user_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
+
+    -- ============================================
+    -- SEED DATA
+    -- ============================================
+    
+    -- Тестовый пользователь (password: test123)
+    INSERT INTO users (user_id, username, email, password_hash, created_at) VALUES
+    ('user-test-001', 'testuser', 'test@example.com', 'hash:test123', NOW())
+    ON CONFLICT (user_id) DO NOTHING;
+
+    -- Sandbox аккаунт для тестового пользователя
+    INSERT INTO accounts (account_id, user_id, name, type, tinkoff_token_encrypted, created_at) VALUES
+    ('acc-sandbox-001', 'user-test-001', 'Test Sandbox', 'SANDBOX', 'enc:fake-tinkoff-token', NOW())
+    ON CONFLICT (account_id) DO NOTHING;
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: auth-postgres-pvc
+  namespace: trading
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-postgres
+  namespace: trading
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-postgres
+  template:
+    metadata:
+      labels:
+        app: auth-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: trading-secrets
+                  key: AUTH_DB_NAME
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: trading-secrets
+                  key: AUTH_DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: trading-secrets
+                  key: AUTH_DB_PASSWORD
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+            - name: init-sql
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "auth_user", "-d", "auth_db"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: auth-postgres-pvc
+        - name: init-sql
+          configMap:
+            name: auth-postgres-init
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-postgres
+  namespace: trading
+spec:
+  selector:
+    app: auth-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
