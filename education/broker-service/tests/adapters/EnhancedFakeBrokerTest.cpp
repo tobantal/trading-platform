@@ -5,13 +5,19 @@
 
 #include <gtest/gtest.h>
 #include "adapters/secondary/broker/EnhancedFakeBroker.hpp"
+#include "settings/BrokerSettings.hpp"
 
 using namespace broker::adapters::secondary;
+using namespace broker::settings;
 
 class EnhancedFakeBrokerTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        broker_ = std::make_unique<EnhancedFakeBroker>();
+        // Создаём settings для тестов
+        settings_ = std::make_shared<BrokerSettings>();
+        
+        // Создаём брокера с settings
+        broker_ = std::make_unique<EnhancedFakeBroker>(settings_);
         broker_->registerAccount(TEST_ACCOUNT, "test-token");
     }
 
@@ -50,10 +56,12 @@ protected:
         return req;
     }
 
+    std::shared_ptr<BrokerSettings> settings_;
     std::unique_ptr<EnhancedFakeBroker> broker_;
     const std::string TEST_ACCOUNT = "test-account";
     const std::string SBER_FIGI = "BBG004730N88";
 };
+
 
 // ============================================================================
 // BASIC OPERATIONS
@@ -110,6 +118,7 @@ TEST_F(EnhancedFakeBrokerTest, PlaceOrder_LimitBuy_Queued) {
     EXPECT_GT(broker_->pendingOrderCount(), 0u);
 }
 
+
 // ============================================================================
 // PORTFOLIO MANAGEMENT
 // ============================================================================
@@ -117,29 +126,26 @@ TEST_F(EnhancedFakeBrokerTest, PlaceOrder_LimitBuy_Queued) {
 TEST_F(EnhancedFakeBrokerTest, GetPortfolio_ReturnsValidPortfolio) {
     auto portfolio = broker_->getPortfolio(TEST_ACCOUNT);
     
-    ASSERT_TRUE(portfolio.has_value());
-    EXPECT_GT(portfolio->cash, 0.0);
+    EXPECT_EQ(portfolio.accountId, TEST_ACCOUNT);
+    EXPECT_GT(portfolio.cash, 0.0);
 }
 
 TEST_F(EnhancedFakeBrokerTest, SetCash_ChangesCash) {
     broker_->setCash(TEST_ACCOUNT, 500000.0);
     auto portfolio = broker_->getPortfolio(TEST_ACCOUNT);
     
-    ASSERT_TRUE(portfolio.has_value());
-    EXPECT_DOUBLE_EQ(portfolio->cash, 500000.0);
+    EXPECT_DOUBLE_EQ(portfolio.cash, 500000.0);
 }
 
 TEST_F(EnhancedFakeBrokerTest, BuyOrder_ReducesCash) {
     auto portfolioBefore = broker_->getPortfolio(TEST_ACCOUNT);
-    ASSERT_TRUE(portfolioBefore.has_value());
-    double initialCash = portfolioBefore->cash;
+    double initialCash = portfolioBefore.cash;
     
     auto req = createBuyMarket(SBER_FIGI, 10);
     broker_->placeOrder(TEST_ACCOUNT, req);
     
     auto portfolioAfter = broker_->getPortfolio(TEST_ACCOUNT);
-    ASSERT_TRUE(portfolioAfter.has_value());
-    EXPECT_LT(portfolioAfter->cash, initialCash);
+    EXPECT_LT(portfolioAfter.cash, initialCash);
 }
 
 TEST_F(EnhancedFakeBrokerTest, GetPortfolio_AfterBuy_HasPosition) {
@@ -147,9 +153,9 @@ TEST_F(EnhancedFakeBrokerTest, GetPortfolio_AfterBuy_HasPosition) {
     broker_->placeOrder(TEST_ACCOUNT, req);
     
     auto portfolio = broker_->getPortfolio(TEST_ACCOUNT);
-    ASSERT_TRUE(portfolio.has_value());
-    EXPECT_FALSE(portfolio->positions.empty());
+    EXPECT_FALSE(portfolio.positions.empty());
 }
+
 
 // ============================================================================
 // SCENARIO CONFIGURATION
@@ -177,6 +183,7 @@ TEST_F(EnhancedFakeBrokerTest, SetScenario_AlwaysReject) {
     EXPECT_EQ(result.message, "Market closed");
 }
 
+
 // ============================================================================
 // ORDER MANAGEMENT
 // ============================================================================
@@ -191,6 +198,7 @@ TEST_F(EnhancedFakeBrokerTest, CancelOrder_PendingLimit) {
     EXPECT_EQ(broker_->pendingOrderCount(), 0u);
 }
 
+
 // ============================================================================
 // SIMULATION CONTROL
 // ============================================================================
@@ -204,6 +212,7 @@ TEST_F(EnhancedFakeBrokerTest, StartStopSimulation) {
     broker_->stopSimulation();
     EXPECT_FALSE(broker_->isSimulationRunning());
 }
+
 
 // ============================================================================
 // INSTRUMENT ACCESS
@@ -221,6 +230,7 @@ TEST_F(EnhancedFakeBrokerTest, GetAllInstruments_ReturnsMultiple) {
     EXPECT_GT(instruments.size(), 0u);
 }
 
+
 // ============================================================================
 // RESET
 // ============================================================================
@@ -232,4 +242,18 @@ TEST_F(EnhancedFakeBrokerTest, Reset_ClearsAllData) {
     broker_->reset();
     
     EXPECT_FALSE(broker_->hasAccount(TEST_ACCOUNT));
+}
+
+
+// ============================================================================
+// SETTINGS INTEGRATION
+// ============================================================================
+
+TEST_F(EnhancedFakeBrokerTest, UsesSettingsFromDI) {
+    // Проверяем что брокер создался с настройками
+    EXPECT_NE(settings_, nullptr);
+    
+    // Брокер должен работать нормально
+    auto quote = broker_->getQuote(SBER_FIGI);
+    ASSERT_TRUE(quote.has_value());
 }

@@ -1,0 +1,38 @@
+# k8s/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: trading
+
+resources:
+  - namespace.yaml
+  - secret.yaml
+  - rabbitmq.yaml
+  - auth-postgres.yaml
+  - auth-service.yaml
+  - broker-postgres.yaml
+  - broker-service.yaml
+  - trading-postgres.yaml
+  - trading-service.yaml
+  - ingress.yaml
+
+# Без хэш-суффикса в именах ConfigMap
+generatorOptions:
+  disableNameSuffixHash: true
+
+# ConfigMap генерируются из SQL файлов (единый источник правды)
+configMapGenerator:
+  - name: auth-postgres-init
+    files:
+      - 01-schema.sql=../auth-service/sql/01-schema.sql
+      - 02-data.sql=../auth-service/sql/02-data.sql
+
+  - name: broker-postgres-init
+    files:
+      - 01-schema.sql=../broker-service/sql/01-schema.sql
+      - 02-data.sql=../broker-service/sql/02-data.sql
+
+  - name: trading-postgres-init
+    files:
+      - 01-schema.sql=../trading-service/sql/01-schema.sql
+      - 02-data.sql=../trading-service/sql/02-data.sql

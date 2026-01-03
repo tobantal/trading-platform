@@ -6,7 +6,6 @@ cmake_minimum_required(VERSION 3.16)
 # ============================================================================
 set(BROKER_SOURCES
     src/main.cpp
-    src/BrokerApp.cpp
     src/domain/events/OrderCreatedEvent.cpp
     src/domain/events/OrderFilledEvent.cpp
     src/domain/events/OrderCancelledEvent.cpp
@@ -25,6 +24,7 @@ target_include_directories(broker-service PRIVATE
 target_link_libraries(broker-service PRIVATE
     microservice-core
     microservice-boost
+    cache
     pqxx
     amqpcpp
     OpenSSL::SSL
@@ -41,6 +41,8 @@ if(BUILD_TESTS)
         tests/adapters/OrderProcessorTest.cpp
         tests/adapters/BackgroundTickerTest.cpp
         tests/adapters/EnhancedFakeBrokerTest.cpp
+        tests/endpoints/OrdersHandlerTest.cpp
+        tests/endpoints/PortfolioHandlerTest.cpp
     )
     
     add_executable(broker-service-tests ${BROKER_TEST_SOURCES})
@@ -50,6 +52,7 @@ if(BUILD_TESTS)
     )
     
     target_link_libraries(broker-service-tests PRIVATE
+        cache
         microservice-core
         microservice-boost
         GTest::gtest_main

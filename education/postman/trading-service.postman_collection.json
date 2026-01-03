@@ -1,0 +1,684 @@
+{
+  "info": {
+    "name": "Trading Service Tests",
+    "description": "Postman collection for Trading Service API testing with Auth",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "tradingBaseUrl",
+      "value": "http://arch.homework/trading",
+      "type": "string"
+    },
+    {
+      "key": "authBaseUrl",
+      "value": "http://arch.homework/auth",
+      "type": "string"
+    },
+    {
+      "key": "sessionToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accountId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "orderId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Setup Auth",
+      "item": [
+        {
+          "name": "Login to Auth Service",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Session token saved', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.session_token).to.not.be.empty;",
+                  "    pm.collectionVariables.set('sessionToken', json.session_token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"username\": \"testuser\",\n    \"password\": \"test123\"\n}"
+            },
+            "url": {
+              "raw": "{{authBaseUrl}}/api/v1/auth/login",
+              "host": ["{{authBaseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Accounts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Account ID saved', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.accounts).to.be.an('array');",
+                  "    pm.expect(json.accounts.length).to.be.at.least(1);",
+                  "    pm.collectionVariables.set('accountId', json.accounts[0].account_id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{sessionToken}}"}
+            ],
+            "url": {
+              "raw": "{{authBaseUrl}}/api/v1/accounts",
+              "host": ["{{authBaseUrl}}"],
+              "path": ["api", "v1", "accounts"]
+            }
+          }
+        },
+        {
+          "name": "Get Access Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Access token saved', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.access_token).to.not.be.empty;",
+                  "    pm.collectionVariables.set('accessToken', json.access_token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{sessionToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"account_id\": \"{{accountId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{authBaseUrl}}/api/v1/auth/access-token",
+              "host": ["{{authBaseUrl}}"],
+              "path": ["api", "v1", "auth", "access-token"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Status is healthy', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('healthy');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/health",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Instruments (No Auth)",
+      "item": [
+        {
+          "name": "Get All Instruments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns array', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.instruments).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Instruments have required fields', function() {",
+                  "    var json = pm.response.json();",
+                  "    if (json.instruments.length > 0) {",
+                  "        var instr = json.instruments[0];",
+                  "        pm.expect(instr).to.have.property('figi');",
+                  "        pm.expect(instr).to.have.property('ticker');",
+                  "        pm.expect(instr).to.have.property('name');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/instruments",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "instruments"]
+            }
+          }
+        },
+        {
+          "name": "Get Instrument by FIGI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns SBER instrument', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.ticker).to.eql('SBER');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/instruments/BBG004730N88",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "instruments", "BBG004730N88"]
+            }
+          }
+        },
+        {
+          "name": "Search Instruments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Finds SBER', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.instruments).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/instruments/search?query=SBER",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "instruments", "search"],
+              "query": [{"key": "query", "value": "SBER"}]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Quotes (No Auth)",
+      "item": [
+        {
+          "name": "Get Quotes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns quotes array', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.quotes).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Quotes have price fields', function() {",
+                  "    var json = pm.response.json();",
+                  "    if (json.quotes.length > 0) {",
+                  "        var quote = json.quotes[0];",
+                  "        pm.expect(quote).to.have.property('last_price');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/quotes?figis=BBG004730N88,BBG004730RP0",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "quotes"],
+              "query": [{"key": "figis", "value": "BBG004730N88,BBG004730RP0"}]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Orders (With Auth)",
+      "item": [
+        {
+          "name": "Get Orders - No Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401 Unauthorized', function() {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "",
+                  "pm.test('Error message present', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('error');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Get Orders - With Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns orders array', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.orders).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+            ],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Create Market Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 Created', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Returns order_id', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('order_id');",
+                  "    pm.collectionVariables.set('orderId', json.order_id);",
+                  "});",
+                  "",
+                  "pm.test('Status is PENDING', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('PENDING');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"figi\": \"BBG004730N88\",\n    \"quantity\": 10,\n    \"direction\": \"BUY\",\n    \"type\": \"MARKET\"\n}"
+            },
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Create Limit Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 Created', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Returns order_id', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('order_id');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"figi\": \"BBG004730N88\",\n    \"quantity\": 5,\n    \"direction\": \"SELL\",\n    \"type\": \"LIMIT\",\n    \"price\": 280.50,\n    \"currency\": \"RUB\"\n}"
+            },
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Create Order - Invalid (No FIGI)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 Bad Request', function() {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error message about FIGI', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.error).to.include('FIGI');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"quantity\": 10,\n    \"direction\": \"BUY\"\n}"
+            },
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Cancel Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns order_id', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('order_id');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+            ],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders/{{orderId}}",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders", "{{orderId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Portfolio (With Auth)",
+      "item": [
+        {
+          "name": "Get Portfolio - No Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401 Unauthorized', function() {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/portfolio",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "portfolio"]
+            }
+          }
+        },
+        {
+          "name": "Get Portfolio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Has cash and positions', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('cash');",
+                  "    pm.expect(json).to.have.property('positions');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+            ],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/portfolio",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "portfolio"]
+            }
+          }
+        },
+        {
+          "name": "Get Positions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Returns positions array', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+            ],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/portfolio/positions",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "portfolio", "positions"]
+            }
+          }
+        },
+        {
+          "name": "Get Cash",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Has amount and currency', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('amount');",
+                  "    pm.expect(json).to.have.property('currency');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"}
+            ],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/portfolio/cash",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "portfolio", "cash"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

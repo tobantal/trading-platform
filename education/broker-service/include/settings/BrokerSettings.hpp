@@ -20,6 +20,7 @@ namespace broker::settings {
  * - BROKER_PARTIAL_RATIO: доля частичного исполнения (0.5 = 50%)
  * - BROKER_TICK_INTERVAL_MS: интервал тиков в мс
  * - BROKER_ENABLE_TICKER: включить фоновую симуляцию цен
+ * - BROKER_SEED: seed для RNG (0 = random)
  * 
  * @example K8s ConfigMap:
  * ```yaml
@@ -33,6 +34,7 @@ namespace broker::settings {
  *   BROKER_PARTIAL_RATIO: "0.5"
  *   BROKER_TICK_INTERVAL_MS: "100"
  *   BROKER_ENABLE_TICKER: "true"
+ *   BROKER_SEED: "0"
  * ```
  */
 class BrokerSettings {
@@ -46,6 +48,7 @@ public:
         partialRatio_ = std::stod(getEnvOrDefault("BROKER_PARTIAL_RATIO", "0.5"));
         tickIntervalMs_ = std::stoi(getEnvOrDefault("BROKER_TICK_INTERVAL_MS", "100"));
         enableTicker_ = getEnvOrDefault("BROKER_ENABLE_TICKER", "true") == "true";
+        seed_ = static_cast<unsigned int>(std::stoul(getEnvOrDefault("BROKER_SEED", "0")));
     }
     
     /**
@@ -75,6 +78,12 @@ public:
      * @brief Включён ли фоновый тикер
      */
     bool isTickerEnabled() const { return enableTicker_; }
+    
+    /**
+     * @brief Получить seed для RNG
+     * @return 0 = random seed
+     */
+    unsigned int getSeed() const { return seed_; }
 
 private:
     std::string fillBehavior_;
@@ -82,6 +91,7 @@ private:
     double partialRatio_;
     int tickIntervalMs_;
     bool enableTicker_;
+    unsigned int seed_;
     
     /**
      * @brief Получить значение ENV или вернуть default

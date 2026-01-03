@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trading-service
+  namespace: trading
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trading-service
+  template:
+    metadata:
+      labels:
+        app: trading-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8082"
+        prometheus.io/path: "/metrics"
+    spec:
+      initContainers:
+        - name: wait-for-auth-service
+          image: busybox
+          command: ['sh', '-c', 'until nc -z auth-service 8081; do echo waiting for auth-service; sleep 2; done']
+        - name: wait-for-broker-service
+          image: busybox
+          command: ['sh', '-c', 'until nc -z broker-service 8083; do echo waiting for broker-service; sleep 2; done']
+        - name: wait-for-rabbitmq
+          image: busybox
+          command: ['sh', '-c', 'until nc -z rabbitmq 5672; do echo waiting for rabbitmq; sleep 2; done']
+      containers:
+        - name: trading-service
+          image: tobantal/trading-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8082
+          env:
+            - name: HTTP_PORT
+              value: "8082"
+            # Auth Service
+            - name: AUTH_SERVICE_HOST
+              value: "auth-service"
+            - name: AUTH_SERVICE_PORT
+              value: "8081"
+            # Broker Service
+            - name: BROKER_SERVICE_HOST
+              value: "broker-service"
+            - name: BROKER_SERVICE_PORT
+              value: "8083"
+            # RabbitMQ
+            - name: RABBITMQ_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: trading-secrets
+                  key: RABBITMQ_HOST
+            - name: RABBITMQ_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: trading-secrets
+                  key: RABBITMQ_PORT
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: trading-secrets
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: trading-secrets
+                  key: RABBITMQ_PASSWORD
+            - name: RABBITMQ_EXCHANGE
+              value: "trading.events"
+            # Cache settings
+            - name: CACHE_QUOTE_SIZE
+              value: "1000"
+            - name: CACHE_QUOTE_TTL_SECONDS
+              value: "10"
+            - name: CACHE_INSTRUMENT_SIZE
+              value: "500"
+            - name: CACHE_INSTRUMENT_TTL_SECONDS
+              value: "3600"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            initialDelaySeconds: 15
+            periodSeconds: 20
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trading-service
+  namespace: trading
+spec:
+  selector:
+    app: trading-service
+  ports:
+    - port: 8082
+      targetPort: 8082

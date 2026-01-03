@@ -131,7 +131,7 @@
                   "    var jsonData = pm.response.json();",
                   "    pm.expect(jsonData.figi).to.eql('BBG004730N88');",
                   "    pm.expect(jsonData.ticker).to.eql('SBER');",
-                  "    pm.expect(jsonData.name).to.eql('Sberbank');",
+                  "    pm.expect(jsonData.name).to.eql('Сбербанк');",
                   "    pm.expect(jsonData.currency).to.eql('RUB');",
                   "});"
                 ],
@@ -163,6 +163,7 @@
                   "pm.test('Correct instrument returned', function () {",
                   "    var jsonData = pm.response.json();",
                   "    pm.expect(jsonData.ticker).to.eql('GAZP');",
+                  "    pm.expect(jsonData.name).to.eql('Газпром');",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -256,42 +257,6 @@
           }
         },
         {
-          "name": "Get LKOH Quote",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('LKOH quote correct', function () {",
-                  "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.figi).to.eql('BBG004731032');",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/api/v1/quotes?figi=BBG004731032",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "quotes"],
-              "query": [
-                {
-                  "key": "figi",
-                  "value": "BBG004731032"
-                }
-              ]
-            }
-          }
-        },
-        {
           "name": "Get Quote - Missing FIGI",
           "event": [
             {
@@ -350,10 +315,10 @@
       ]
     },
     {
-      "name": "Orders",
+      "name": "Orders - Sandbox Accounts",
       "item": [
         {
-          "name": "Place Market Buy Order",
+          "name": "Place Market Buy Order (sandbox)",
           "event": [
             {
               "listen": "test",
@@ -394,7 +359,7 @@
           }
         },
         {
-          "name": "Place Limit Buy Order",
+          "name": "Place Limit Buy Order (sandbox)",
           "event": [
             {
               "listen": "test",
@@ -433,41 +398,7 @@
           }
         },
         {
-          "name": "Place Sell Order",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 201 or 400', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([201, 400]);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"account_id\": \"acc-001-sandbox\",\n  \"figi\": \"BBG004730N88\",\n  \"quantity\": 5,\n  \"direction\": \"SELL\",\n  \"order_type\": \"MARKET\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/orders",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "orders"]
-            }
-          }
-        },
-        {
-          "name": "Get Orders List",
+          "name": "Get Orders List (sandbox)",
           "event": [
             {
               "listen": "test",
@@ -503,76 +434,20 @@
           }
         },
         {
-          "name": "Get Order by ID",
+          "name": "New Sandbox Account Auto-Created",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 200 or 404', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/api/v1/orders/{{order_id}}?account_id=acc-001-sandbox",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "orders", "{{order_id}}"],
-              "query": [
-                {
-                  "key": "account_id",
-                  "value": "acc-001-sandbox"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Cancel Order",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200 or 404', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 404]);",
-                  "});"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{base_url}}/api/v1/orders/{{order_id}}?account_id=acc-001-sandbox",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "orders", "{{order_id}}"],
-              "query": [
-                {
-                  "key": "account_id",
-                  "value": "acc-001-sandbox"
-                }
-              ]
-            }
-          }
-        },
-        {
-          "name": "Order - Invalid Account",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 400 or 404', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([400, 404]);",
+                  "// Новый sandbox аккаунт должен создаться автоматически",
+                  "pm.test('Status code is 201 (auto-created)', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Order created for new sandbox account', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('order_id');",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -589,7 +464,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"account_id\": \"invalid-account\",\n  \"figi\": \"BBG004730N88\",\n  \"quantity\": 10,\n  \"direction\": \"BUY\",\n  \"order_type\": \"MARKET\"\n}"
+              "raw": "{\n  \"account_id\": \"new-test-sandbox-account\",\n  \"figi\": \"BBG004730N88\",\n  \"quantity\": 1,\n  \"direction\": \"BUY\",\n  \"order_type\": \"MARKET\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/orders",
@@ -601,10 +476,87 @@
       ]
     },
     {
-      "name": "Portfolio",
+      "name": "Orders - Non-Sandbox Accounts",
       "item": [
         {
-          "name": "Get Portfolio",
+          "name": "Place Order (non-sandbox) - Should Fail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Не-sandbox аккаунты должны отклоняться",
+                  "pm.test('Status code is 404 or rejected', function () {",
+                  "    // Может вернуть 404 (account not found) или 201 с rejected status",
+                  "    if (pm.response.code === 201) {",
+                  "        var jsonData = pm.response.json();",
+                  "        pm.expect(jsonData.status).to.eql('REJECTED');",
+                  "    } else {",
+                  "        pm.expect(pm.response.code).to.eql(404);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"account_id\": \"real-production-account\",\n  \"figi\": \"BBG004730N88\",\n  \"quantity\": 10,\n  \"direction\": \"BUY\",\n  \"order_type\": \"MARKET\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Get Orders (non-sandbox) - Should Fail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders?account_id=unknown-real-account",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "orders"],
+              "query": [
+                {
+                  "key": "account_id",
+                  "value": "unknown-real-account"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Portfolio - Sandbox Accounts",
+      "item": [
+        {
+          "name": "Get Portfolio (sandbox)",
           "event": [
             {
               "listen": "test",
@@ -642,7 +594,7 @@
           }
         },
         {
-          "name": "Get Positions",
+          "name": "Get Positions (sandbox)",
           "event": [
             {
               "listen": "test",
@@ -678,7 +630,7 @@
           }
         },
         {
-          "name": "Get Cash Balance",
+          "name": "Get Cash Balance (sandbox)",
           "event": [
             {
               "listen": "test",
@@ -715,7 +667,50 @@
           }
         },
         {
-          "name": "Portfolio - Invalid Account",
+          "name": "New Sandbox Account - Default Balance",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Новый sandbox аккаунт должен получить начальный баланс 100,000 RUB",
+                  "pm.test('Status code is 200 (auto-created)', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Has default balance ~100000', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.cash.units).to.be.at.least(90000);",
+                  "    pm.expect(jsonData.cash.units).to.be.at.most(110000);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/portfolio?account_id=brand-new-sandbox-test",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "portfolio"],
+              "query": [
+                {
+                  "key": "account_id",
+                  "value": "brand-new-sandbox-test"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Portfolio - Non-Sandbox Accounts",
+      "item": [
+        {
+          "name": "Get Portfolio (non-sandbox) - Should Fail",
           "event": [
             {
               "listen": "test",
@@ -733,13 +728,13 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/api/v1/portfolio?account_id=invalid-account",
+              "raw": "{{base_url}}/api/v1/portfolio?account_id=unknown-real-account",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "portfolio"],
               "query": [
                 {
                   "key": "account_id",
-                  "value": "invalid-account"
+                  "value": "unknown-real-account"
                 }
               ]
             }

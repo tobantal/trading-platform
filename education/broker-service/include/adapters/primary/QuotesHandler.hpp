@@ -6,44 +6,42 @@
 #include "ports/input/IQuoteService.hpp"
 #include <nlohmann/json.hpp>
 #include <memory>
+#include <iostream>
 
 namespace broker::adapters::primary {
 
 /**
  * @brief HTTP handler for quotes endpoint
+ * 
+ * GET /api/v1/quotes?figi=BBG004730N88
  */
 class QuotesHandler : public IHttpHandler {
 public:
     explicit QuotesHandler(std::shared_ptr<ports::input::IQuoteService> quoteService)
         : quoteService_(std::move(quoteService))
-    {}
+    {
+        std::cout << "[QuotesHandler] Created" << std::endl;
+    }
 
     void handle(IRequest& req, IResponse& res) override {
-        std::string path = req.getPath();
+        // Получаем figi из query параметров (НЕ из path!)
+        auto params = req.getParams();
+        auto it = params.find("figi");
         
-        // Parse figi from query string
-        std::string figi;
-        auto pos = path.find("figi=");
-        if (pos != std::string::npos) {
-            figi = path.substr(pos + 5);
-            auto ampPos = figi.find('&');
-            if (ampPos != std::string::npos) {
-                figi = figi.substr(0, ampPos);
-            }
-        }
-        
-        if (figi.empty()) {
+        if (it == params.end() || it->second.empty()) {
             res.setStatus(400);
             res.setHeader("Content-Type", "application/json");
             res.setBody(R"({"error": "Missing figi parameter"})");
             return;
         }
         
+        std::string figi = it->second;
+        
         auto quote = quoteService_->getQuote(figi);
         if (!quote) {
             res.setStatus(404);
             res.setHeader("Content-Type", "application/json");
-            res.setBody(R"({"error": "Quote not found"})");
+            res.setBody(R"({"error": "Quote not found for figi: )" + figi + R"("})");
             return;
         }
         

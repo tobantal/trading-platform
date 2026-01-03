@@ -31,6 +31,7 @@
 #include "adapters/secondary/PostgresBrokerOrderRepository.hpp"
 #include "adapters/secondary/PostgresBrokerPositionRepository.hpp"
 #include "adapters/secondary/PostgresBrokerBalanceRepository.hpp"
+#include "adapters/secondary/broker/EnhancedFakeBroker.hpp"
 #include "adapters/secondary/broker/FakeBrokerAdapter.hpp"
 
 // Primary Adapters
@@ -38,6 +39,8 @@
 #include "adapters/primary/MetricsHandler.hpp"
 #include "adapters/primary/InstrumentsHandler.hpp"
 #include "adapters/primary/QuotesHandler.hpp"
+#include "adapters/primary/PortfolioHandler.hpp"
+#include "adapters/primary/OrdersHandler.hpp"
 
 // RabbitMQ
 #include "adapters/secondary/events/RabbitMQAdapter.hpp"
@@ -53,6 +56,14 @@ namespace broker {
  * @brief Broker Service Application
  * 
  * Hexagonal architecture with Boost.DI for dependency injection.
+ * 
+ * DI Layers:
+ * 1. Settings (DbSettings, RabbitMQSettings, BrokerSettings)
+ * 2. Secondary Adapters (Repositories, RabbitMQ)
+ * 3. EnhancedFakeBroker (получает BrokerSettings)
+ * 4. FakeBrokerAdapter (получает EnhancedFakeBroker и все репозитории)
+ * 5. Application Services
+ * 6. Primary Adapters (HTTP Handlers)
  */
 class BrokerApp : public BoostBeastApplication {
 public:
@@ -72,7 +83,9 @@ protected:
         std::cout << "[BrokerApp] Configuring Boost.DI injection..." << std::endl;
 
         auto injector = di::make_injector(
+            // ================================================================
             // Layer 1: Settings
+            // ================================================================
             di::bind<settings::DbSettings>()
                 .to<settings::DbSettings>()
                 .in(di::singleton),
@@ -85,12 +98,16 @@ protected:
                 .to<settings::BrokerSettings>()
                 .in(di::singleton),
 
-            // events
+            // ================================================================
+            // Layer 2: Secondary Adapters - Event Publisher
+            // ================================================================
             di::bind<ports::output::IEventPublisher>()
                 .to<adapters::secondary::RabbitMQAdapter>()
                 .in(di::singleton),
 
-            // Layer 2: Secondary Adapters (Repositories)
+            // ================================================================
+            // Layer 3: Secondary Adapters - Repositories
+            // ================================================================
             di::bind<ports::output::IInstrumentRepository>()
                 .to<adapters::secondary::PostgresInstrumentRepository>()
                 .in(di::singleton),
@@ -111,12 +128,24 @@ protected:
                 .to<adapters::secondary::PostgresBrokerBalanceRepository>()
                 .in(di::singleton),
 
-            // Layer 3: Broker Gateway (EnhancedFakeBroker с симуляцией цен)
+            // ================================================================
+            // Layer 4: EnhancedFakeBroker (зависит от BrokerSettings)
+            // ================================================================
+            di::bind<adapters::secondary::EnhancedFakeBroker>()
+                .to<adapters::secondary::EnhancedFakeBroker>()
+                .in(di::singleton),
+
+            // ================================================================
+            // Layer 5: Broker Gateway (FakeBrokerAdapter)
+            // Зависит от: EnhancedFakeBroker, EventPublisher, все репозитории
+            // ================================================================
             di::bind<ports::output::IBrokerGateway>()
                 .to<adapters::secondary::FakeBrokerAdapter>()
                 .in(di::singleton),
 
-            // Layer 4: Application Services
+            // ================================================================
+            // Layer 6: Application Services
+            // ================================================================
             di::bind<ports::input::IQuoteService>()
                 .to<application::QuoteService>()
                 .in(di::singleton)
@@ -124,7 +153,9 @@ protected:
 
         std::cout << "[BrokerApp] DI Injector configured" << std::endl;
 
-        // Layer 5: HTTP Handlers (Primary Adapters)
+        // ================================================================
+        // Layer 7: HTTP Handlers (Primary Adapters)
+        // ================================================================
         std::cout << "[BrokerApp] Registering HTTP Handlers..." << std::endl;
 
         {
@@ -150,6 +181,24 @@ protected:
             auto handler = injector.create<std::shared_ptr<adapters::primary::QuotesHandler>>();
             handlers_[getHandlerKey("GET", "/api/v1/quotes")] = handler;
             std::cout << "  + QuotesHandler: GET /api/v1/quotes" << std::endl;
+        }
+
+        // ====== Portfolio Handler ======
+        {
+            auto handler = injector.create<std::shared_ptr<adapters::primary::PortfolioHandler>>();
+            handlers_[getHandlerKey("GET", "/api/v1/portfolio")] = handler;
+            handlers_[getHandlerKey("GET", "/api/v1/portfolio/*")] = handler;
+            std::cout << "  + PortfolioHandler: GET /api/v1/portfolio[/*]" << std::endl;
+        }
+
+        // ====== Orders Handler ======
+        {
+            auto handler = injector.create<std::shared_ptr<adapters::primary::OrdersHandler>>();
+            handlers_[getHandlerKey("GET", "/api/v1/orders")] = handler;
+            handlers_[getHandlerKey("GET", "/api/v1/orders/*")] = handler;
+            handlers_[getHandlerKey("POST", "/api/v1/orders")] = handler;
+            handlers_[getHandlerKey("DELETE", "/api/v1/orders/*")] = handler;
+            std::cout << "  + OrdersHandler: GET/POST/DELETE /api/v1/orders[/*]" << std::endl;
         }
 
         std::cout << "[BrokerApp] HTTP Handlers registered" << std::endl;

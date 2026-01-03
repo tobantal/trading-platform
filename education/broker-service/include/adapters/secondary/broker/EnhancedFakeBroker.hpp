@@ -1,9 +1,11 @@
+// include/adapters/secondary/broker/EnhancedFakeBroker.hpp
 #pragma once
 
 #include "MarketScenario.hpp"
 #include "PriceSimulator.hpp"
 #include "OrderProcessor.hpp"
 #include "BackgroundTicker.hpp"
+#include "settings/BrokerSettings.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -18,11 +20,11 @@
 namespace broker::adapters::secondary {
 
 // ============================================================================
-// DOMAIN TYPES (Ð´Ð»Ñ Ð¸Ð·Ð¾Ð»ÑÑ†Ð¸Ð¸ Ð¾Ñ‚ Ð¾ÑÐ½Ð¾Ð²Ð½Ð¾Ð³Ð¾ domain)
+// DOMAIN TYPES (для изоляции от основного domain)
 // ============================================================================
 
 /**
- * @brief ÐšÐ¾Ñ‚Ð¸Ñ€Ð¾Ð²ÐºÐ° (ÑÐ¾Ð²Ð¼ÐµÑÑ‚Ð¸Ð¼Ð°Ñ Ñ domain::Quote)
+ * @brief Котировка (совместимая с domain::Quote)
  */
 struct BrokerQuote {
     std::string figi;
@@ -37,7 +39,7 @@ struct BrokerQuote {
 };
 
 /**
- * @brief Ð˜Ð½ÑÑ‚Ñ€ÑƒÐ¼ÐµÐ½Ñ‚
+ * @brief Инструмент
  */
 struct BrokerInstrument {
     std::string figi;
@@ -49,7 +51,7 @@ struct BrokerInstrument {
 };
 
 /**
- * @brief Ð—Ð°Ð¿Ñ€Ð¾Ñ Ð½Ð° Ð¾Ñ€Ð´ÐµÑ€ (ÑÐ¾Ð²Ð¼ÐµÑÑ‚Ð¸Ð¼Ñ‹Ð¹ Ñ domain::OrderRequest)
+ * @brief Запрос на ордер (совместимый с domain::OrderRequest)
  */
 struct BrokerOrderRequest {
     std::string accountId;
@@ -61,7 +63,7 @@ struct BrokerOrderRequest {
 };
 
 /**
- * @brief Ð ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚ Ð¾Ñ€Ð´ÐµÑ€Ð° (ÑÐ¾Ð²Ð¼ÐµÑÑ‚Ð¸Ð¼Ñ‹Ð¹ Ñ domain::OrderResult)
+ * @brief Результат ордера (совместимый с domain::OrderResult)
  */
 struct BrokerOrderResult {
     std::string orderId;
@@ -76,7 +78,7 @@ struct BrokerOrderResult {
 };
 
 /**
- * @brief ÐŸÐ¾Ð·Ð¸Ñ†Ð¸Ñ
+ * @brief Позиция
  */
 struct BrokerPosition {
     std::string figi;
@@ -94,7 +96,7 @@ struct BrokerPosition {
 };
 
 /**
- * @brief ÐŸÐ¾Ñ€Ñ‚Ñ„ÐµÐ»ÑŒ
+ * @brief Портфель
  */
 struct BrokerPortfolio {
     std::string accountId;
@@ -116,7 +118,7 @@ struct BrokerPortfolio {
 // ============================================================================
 
 /**
- * @brief Ð¡Ð¾Ð±Ñ‹Ñ‚Ð¸Ðµ Ð¸ÑÐ¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ Ð¾Ñ€Ð´ÐµÑ€Ð°
+ * @brief Событие исполнения ордера
  */
 struct BrokerOrderFillEvent {
     std::string orderId;
@@ -129,7 +131,7 @@ struct BrokerOrderFillEvent {
 };
 
 /**
- * @brief Ð¡Ð¾Ð±Ñ‹Ñ‚Ð¸Ðµ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ ÐºÐ¾Ñ‚Ð¸Ñ€Ð¾Ð²ÐºÐ¸
+ * @brief Событие обновления котировки
  */
 struct BrokerQuoteUpdateEvent {
     std::string figi;
@@ -147,55 +149,35 @@ using QuoteUpdateEventCallback = std::function<void(const BrokerQuoteUpdateEvent
 // ============================================================================
 
 /**
- * @brief Ð£Ð»ÑƒÑ‡ÑˆÐµÐ½Ð½Ñ‹Ð¹ Ñ„ÐµÐ¹ÐºÐ¾Ð²Ñ‹Ð¹ Ð±Ñ€Ð¾ÐºÐµÑ€ Ñ Ñ€ÐµÐ°Ð»Ð¸ÑÑ‚Ð¸Ñ‡Ð½Ð¾Ð¹ ÑÐ¸Ð¼ÑƒÐ»ÑÑ†Ð¸ÐµÐ¹
+ * @brief Улучшенный фейковый брокер с реалистичной симуляцией
  * 
- * ÐžÐ±ÑŠÐµÐ´Ð¸Ð½ÑÐµÑ‚:
- * - PriceSimulator: Ð³ÐµÐ½ÐµÑ€Ð°Ñ†Ð¸Ñ Ñ†ÐµÐ½ Ñ random walk
- * - OrderProcessor: Ð¾Ð±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° Ð¾Ñ€Ð´ÐµÑ€Ð¾Ð² ÑÐ¾ ÑÑ†ÐµÐ½Ð°Ñ€Ð¸ÑÐ¼Ð¸
- * - BackgroundTicker: Ñ„Ð¾Ð½Ð¾Ð²Ð¾Ðµ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ðµ Ñ†ÐµÐ½
+ * Объединяет:
+ * - PriceSimulator: генерация цен с random walk
+ * - OrderProcessor: обработка ордеров со сценариями
+ * - BackgroundTicker: фоновое обновление цен
  * 
- * ÐŸÐ¾Ð´Ð´ÐµÑ€Ð¶Ð¸Ð²Ð°ÐµÑ‚:
- * - ÐœÐ½Ð¾Ð¶ÐµÑÑ‚Ð²Ð¾ Ð°ÐºÐºÐ°ÑƒÐ½Ñ‚Ð¾Ð² Ñ Ð¸Ð·Ð¾Ð»Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ñ‹Ð¼Ð¸ Ð¿Ð¾Ñ€Ñ‚Ñ„ÐµÐ»ÑÐ¼Ð¸
- * - Ð Ð°Ð·Ð»Ð¸Ñ‡Ð½Ñ‹Ðµ ÑÑ†ÐµÐ½Ð°Ñ€Ð¸Ð¸ Ð¸ÑÐ¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ (slippage, partial fills, rejection)
- * - Ð¡Ð¾Ð±Ñ‹Ñ‚Ð¸Ñ Ð´Ð»Ñ Ð¸Ð½Ñ‚ÐµÐ³Ñ€Ð°Ñ†Ð¸Ð¸ Ñ EventBus
- * - Ð”ÐµÑ‚ÐµÑ€Ð¼Ð¸Ð½Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ð¾Ðµ Ñ‚ÐµÑÑ‚Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð¸Ðµ (Ñ‡ÐµÑ€ÐµÐ· setPrice)
- * 
- * @example
- * ```cpp
- * EnhancedFakeBroker broker;
- * 
- * // ÐÐ°ÑÑ‚Ñ€Ð¾Ð¹ÐºÐ° ÑÑ†ÐµÐ½Ð°Ñ€Ð¸Ñ
- * broker.setScenario("SBER", MarketScenario::realistic(280.0));
- * 
- * // Ð ÐµÐ³Ð¸ÑÑ‚Ñ€Ð°Ñ†Ð¸Ñ Ð°ÐºÐºÐ°ÑƒÐ½Ñ‚Ð°
- * broker.registerAccount("acc-001", "token", 1000000.0);
- * 
- * // ÐŸÐ¾Ð´Ð¿Ð¸ÑÐºÐ° Ð½Ð° ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ñ
- * broker.setOrderFillCallback([&](const auto& e) {
- *     eventBus->publish(OrderFilledEvent(e));
- * });
- * 
- * // Ð—Ð°Ð¿ÑƒÑÐº ÑÐ¸Ð¼ÑƒÐ»ÑÑ†Ð¸Ð¸
- * broker.startSimulation(100ms);
- * 
- * // Ð Ð°Ð·Ð¼ÐµÑ‰ÐµÐ½Ð¸Ðµ Ð¾Ñ€Ð´ÐµÑ€Ð°
- * BrokerOrderRequest req{...};
- * auto result = broker.placeOrder("acc-001", req);
- * ```
+ * Поддерживает:
+ * - Множество аккаунтов с изолированными портфелями
+ * - Различные сценарии исполнения (slippage, partial fills, rejection)
+ * - События для интеграции с EventBus
+ * - Детерминированное тестирование (через setPrice)
  */
 class EnhancedFakeBroker {
 public:
     /**
-     * @brief ÐšÐ¾Ð½ÑÑ‚Ñ€ÑƒÐºÑ‚Ð¾Ñ€
-     * @param seed Seed Ð´Ð»Ñ RNG (0 = random)
+     * @brief Конструктор
+     * @param settings Настройки брокера (seed, slippage и т.д.)
      */
-    explicit EnhancedFakeBroker(unsigned int seed = 0)
-        : priceSimulator_(std::make_shared<PriceSimulator>(seed))
+    explicit EnhancedFakeBroker(std::shared_ptr<settings::BrokerSettings> settings)
+        : settings_(std::move(settings))
+        , priceSimulator_(std::make_shared<PriceSimulator>(settings_->getSeed()))
         , orderProcessor_(std::make_shared<OrderProcessor>(priceSimulator_))
         , ticker_(std::make_shared<BackgroundTicker>(priceSimulator_, orderProcessor_))
     {
         initDefaultInstruments();
         setupCallbacks();
+        
+        std::cout << "[EnhancedFakeBroker] Initialized with seed=" << settings_->getSeed() << std::endl;
     }
     
     ~EnhancedFakeBroker() {
@@ -207,7 +189,7 @@ public:
     // ========================================================================
     
     /**
-     * @brief Ð—Ð°Ð¿ÑƒÑÑ‚Ð¸Ñ‚ÑŒ Ñ„Ð¾Ð½Ð¾Ð²ÑƒÑŽ ÑÐ¸Ð¼ÑƒÐ»ÑÑ†Ð¸ÑŽ Ñ†ÐµÐ½
+     * @brief Запустить фоновую симуляцию цен
      */
     void startSimulation(std::chrono::milliseconds interval = std::chrono::milliseconds{100}) {
         ticker_->setInterval(interval);
@@ -215,21 +197,21 @@ public:
     }
     
     /**
-     * @brief ÐžÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ ÑÐ¸Ð¼ÑƒÐ»ÑÑ†Ð¸ÑŽ
+     * @brief Остановить симуляцию
      */
     void stopSimulation() {
         ticker_->stop();
     }
     
     /**
-     * @brief ÐŸÑ€Ð¾Ð²ÐµÑ€Ð¸Ñ‚ÑŒ, Ð·Ð°Ð¿ÑƒÑ‰ÐµÐ½Ð° Ð»Ð¸ ÑÐ¸Ð¼ÑƒÐ»ÑÑ†Ð¸Ñ
+     * @brief Проверить, запущена ли симуляция
      */
     bool isSimulationRunning() const {
         return ticker_->isRunning();
     }
     
     /**
-     * @brief Ð’Ñ‹Ð¿Ð¾Ð»Ð½Ð¸Ñ‚ÑŒ Ð¾Ð´Ð¸Ð½ Ñ‚Ð¸Ðº Ð²Ñ€ÑƒÑ‡Ð½ÑƒÑŽ
+     * @brief Выполнить один тик вручную
      */
     void manualTick() {
         ticker_->manualTick();
@@ -240,7 +222,7 @@ public:
     // ========================================================================
     
     /**
-     * @brief Ð£ÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ ÑÑ†ÐµÐ½Ð°Ñ€Ð¸Ð¹ Ð´Ð»Ñ Ð¸Ð½ÑÑ‚Ñ€ÑƒÐ¼ÐµÐ½Ñ‚Ð°
+     * @brief Установить сценарий для инструмента
      */
     void setScenario(const std::string& figi, const MarketScenario& scenario) {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -254,7 +236,7 @@ public:
     }
     
     /**
-     * @brief Ð£ÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ ÑÑ†ÐµÐ½Ð°Ñ€Ð¸Ð¹ Ð¿Ð¾ ÑƒÐ¼Ð¾Ð»Ñ‡Ð°Ð½Ð¸ÑŽ
+     * @brief Установить сценарий по умолчанию
      */
     void setDefaultScenario(const MarketScenario& scenario) {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -262,7 +244,7 @@ public:
     }
     
     /**
-     * @brief ÐŸÐ¾Ð»ÑƒÑ‡Ð¸Ñ‚ÑŒ ÑÑ†ÐµÐ½Ð°Ñ€Ð¸Ð¹ Ð´Ð»Ñ Ð¸Ð½ÑÑ‚Ñ€ÑƒÐ¼ÐµÐ½Ñ‚Ð°
+     * @brief Получить сценарий для инструмента
      */
     MarketScenario getScenario(const std::string& figi) const {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -271,37 +253,37 @@ public:
     }
     
     // ========================================================================
-    // PRICE MANIPULATION (Ð´Ð»Ñ Ñ‚ÐµÑÑ‚Ð¾Ð²)
+    // PRICE MANIPULATION (для тестов)
     // ========================================================================
     
     /**
-     * @brief Ð£ÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ ÐºÐ¾Ð½ÐºÑ€ÐµÑ‚Ð½ÑƒÑŽ Ñ†ÐµÐ½Ñƒ
+     * @brief Установить конкретную цену
      */
     void setPrice(const std::string& figi, double price) {
         priceSimulator_->setPrice(figi, price);
     }
     
     /**
-     * @brief Ð¡Ð´Ð²Ð¸Ð½ÑƒÑ‚ÑŒ Ñ†ÐµÐ½Ñƒ
+     * @brief Сдвинуть цену
      */
     void movePrice(const std::string& figi, double delta) {
         priceSimulator_->movePrice(figi, delta);
     }
     
     /**
-     * @brief Ð˜Ð·Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ Ñ†ÐµÐ½Ñƒ Ð½Ð° Ð¿Ñ€Ð¾Ñ†ÐµÐ½Ñ‚
+     * @brief Изменить цену на процент
      */
     void movePricePercent(const std::string& figi, double percent) {
         priceSimulator_->movePricePercent(figi, percent);
     }
     
     /**
-     * @brief ÐŸÐ¾Ð»ÑƒÑ‡Ð¸Ñ‚ÑŒ ÑÐ¸Ð¼ÑƒÐ»ÑÑ‚Ð¾Ñ€ Ñ†ÐµÐ½ (Ð´Ð»Ñ Ð¿Ñ€ÑÐ¼Ð¾Ð³Ð¾ ÑƒÐ¿Ñ€Ð°Ð²Ð»ÐµÐ½Ð¸Ñ)
+     * @brief Получить симулятор цен (для прямого управления)
      */
     PriceSimulator& priceSimulator() { return *priceSimulator_; }
     
     /**
-     * @brief ÐŸÐ¾Ð»ÑƒÑ‡Ð¸Ñ‚ÑŒ Ð¿Ñ€Ð¾Ñ†ÐµÑÑÐ¾Ñ€ Ð¾Ñ€Ð´ÐµÑ€Ð¾Ð² (Ð´Ð»Ñ Ñ‚ÐµÑÑ‚Ð¾Ð²)
+     * @brief Получить процессор ордеров (для тестов)
      */
     OrderProcessor& orderProcessor() { return *orderProcessor_; }
     
@@ -310,7 +292,7 @@ public:
     // ========================================================================
     
     /**
-     * @brief Ð£ÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ callback Ð´Ð»Ñ ÑÐ¾Ð±Ñ‹Ñ‚Ð¸Ð¹ Ð¸ÑÐ¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ Ð¾Ñ€Ð´ÐµÑ€Ð¾Ð²
+     * @brief Установить callback для событий исполнения ордеров
      */
     void setOrderFillCallback(OrderFillEventCallback callback) {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -318,27 +300,26 @@ public:
     }
     
     /**
-     * @brief Ð£ÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ callback Ð´Ð»Ñ Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¸Ñ ÐºÐ¾Ñ‚Ð¸Ñ€Ð¾Ð²Ð¾Ðº
+     * @brief Установить callback для обновления котировок
      */
     void setQuoteUpdateCallback(QuoteUpdateEventCallback callback) {
         std::lock_guard<std::mutex> lock(mutex_);
         quoteUpdateCallback_ = std::move(callback);
         
-        // ÐŸÐµÑ€ÐµÐ½Ð°ÑÑ‚Ñ€Ð°Ð¸Ð²Ð°ÐµÐ¼ ticker callback
-        ticker_->setQuoteCallback([this](const QuoteUpdate& qu) {
-            BrokerQuoteUpdateEvent event;
-            event.figi = qu.figi;
-            event.bid = qu.bid;
-            event.ask = qu.ask;
-            event.last = qu.last;
-            event.volume = qu.volume;
-            
+        // Пробрасываем в тикер
+        ticker_->setQuoteCallback([this](const QuoteUpdate& update) {
             QuoteUpdateEventCallback cb;
             {
                 std::lock_guard<std::mutex> lock(mutex_);
                 cb = quoteUpdateCallback_;
             }
             if (cb) {
+                BrokerQuoteUpdateEvent event;
+                event.figi = update.figi;
+                event.bid = update.bid;
+                event.ask = update.ask;
+                event.last = update.last;
+                event.volume = update.volume;
                 cb(event);
             }
         });
@@ -349,19 +330,20 @@ public:
     // ========================================================================
     
     /**
-     * @brief Ð—Ð°Ñ€ÐµÐ³Ð¸ÑÑ‚Ñ€Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ Ð°ÐºÐºÐ°ÑƒÐ½Ñ‚
+     * @brief Зарегистрировать аккаунт
      */
-    void registerAccount(const std::string& accountId, const std::string& token, double initialCash = 1000000.0) {
+    void registerAccount(const std::string& accountId, const std::string& token, double initialCash = 100000.0) {
         std::lock_guard<std::mutex> lock(mutex_);
-        
-        AccountData acc;
-        acc.token = token;
-        acc.cash = initialCash;
-        accounts_[accountId] = acc;
+        if (accounts_.find(accountId) == accounts_.end()) {
+            AccountData account;
+            account.token = token;
+            account.cash = initialCash;
+            accounts_[accountId] = account;
+        }
     }
     
     /**
-     * @brief Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð°ÐºÐºÐ°ÑƒÐ½Ñ‚
+     * @brief Удалить аккаунт
      */
     void unregisterAccount(const std::string& accountId) {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -369,22 +351,11 @@ public:
     }
     
     /**
-     * @brief ÐŸÑ€Ð¾Ð²ÐµÑ€Ð¸Ñ‚ÑŒ ÑÑƒÑ‰ÐµÑÑ‚Ð²Ð¾Ð²Ð°Ð½Ð¸Ðµ Ð°ÐºÐºÐ°ÑƒÐ½Ñ‚Ð°
+     * @brief Проверить существование аккаунта
      */
     bool hasAccount(const std::string& accountId) const {
         std::lock_guard<std::mutex> lock(mutex_);
         return accounts_.find(accountId) != accounts_.end();
-    }
-    
-    /**
-     * @brief Ð£ÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ Ð±Ð°Ð»Ð°Ð½Ñ Ð°ÐºÐºÐ°ÑƒÐ½Ñ‚Ð° (Ð´Ð»Ñ Ñ‚ÐµÑÑ‚Ð¾Ð²)
-     */
-    void setCash(const std::string& accountId, double cash) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        auto it = accounts_.find(accountId);
-        if (it != accounts_.end()) {
-            it->second.cash = cash;
-        }
     }
     
     // ========================================================================
@@ -392,59 +363,48 @@ public:
     // ========================================================================
     
     /**
-     * @brief ÐŸÐ¾Ð»ÑƒÑ‡Ð¸Ñ‚ÑŒ ÐºÐ¾Ñ‚Ð¸Ñ€Ð¾Ð²ÐºÑƒ
+     * @brief Получить котировку
      */
     std::optional<BrokerQuote> getQuote(const std::string& figi) const {
         auto quote = priceSimulator_->getQuote(figi);
-        if (!quote) {
-            return std::nullopt;
-        }
-        
-        std::lock_guard<std::mutex> lock(mutex_);
-        auto instrIt = instruments_.find(figi);
+        if (!quote) return std::nullopt;
         
         BrokerQuote result;
         result.figi = figi;
-        result.ticker = (instrIt != instruments_.end()) ? instrIt->second.ticker : figi;
         result.lastPrice = quote->last;
         result.bidPrice = quote->bid;
         result.askPrice = quote->ask;
         result.volume = quote->volume;
         
-        return result;
-    }
-    
-    /**
-     * @brief ÐŸÐ¾Ð»ÑƒÑ‡Ð¸Ñ‚ÑŒ ÐºÐ¾Ñ‚Ð¸Ñ€Ð¾Ð²ÐºÐ¸ Ð´Ð»Ñ Ð½ÐµÑÐºÐ¾Ð»ÑŒÐºÐ¸Ñ… Ð¸Ð½ÑÑ‚Ñ€ÑƒÐ¼ÐµÐ½Ñ‚Ð¾Ð²
-     */
-    std::vector<BrokerQuote> getQuotes(const std::vector<std::string>& figis) const {
-        std::vector<BrokerQuote> result;
-        for (const auto& figi : figis) {
-            if (auto quote = getQuote(figi)) {
-                result.push_back(*quote);
-            }
+        // Ticker из инструмента
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto it = instruments_.find(figi);
+        if (it != instruments_.end()) {
+            result.ticker = it->second.ticker;
         }
+        
         return result;
     }
     
     /**
-     * @brief ÐŸÐ¾Ð»ÑƒÑ‡Ð¸Ñ‚ÑŒ Ð¸Ð½ÑÑ‚Ñ€ÑƒÐ¼ÐµÐ½Ñ‚ Ð¿Ð¾ FIGI
+     * @brief Получить инструмент
      */
     std::optional<BrokerInstrument> getInstrument(const std::string& figi) const {
         std::lock_guard<std::mutex> lock(mutex_);
         auto it = instruments_.find(figi);
-        if (it == instruments_.end()) {
-            return std::nullopt;
+        if (it != instruments_.end()) {
+            return it->second;
         }
-        return it->second;
+        return std::nullopt;
     }
     
     /**
-     * @brief ÐŸÐ¾Ð»ÑƒÑ‡Ð¸Ñ‚ÑŒ Ð²ÑÐµ Ð¸Ð½ÑÑ‚Ñ€ÑƒÐ¼ÐµÐ½Ñ‚Ñ‹
+     * @brief Получить все инструменты
      */
     std::vector<BrokerInstrument> getAllInstruments() const {
         std::lock_guard<std::mutex> lock(mutex_);
         std::vector<BrokerInstrument> result;
+        result.reserve(instruments_.size());
         for (const auto& [figi, instr] : instruments_) {
             result.push_back(instr);
         }
@@ -452,22 +412,16 @@ public:
     }
     
     /**
-     * @brief ÐŸÐ¾Ð¸ÑÐº Ð¸Ð½ÑÑ‚Ñ€ÑƒÐ¼ÐµÐ½Ñ‚Ð¾Ð² Ð¿Ð¾ Ñ‚Ð¸ÐºÐµÑ€Ñƒ/Ð½Ð°Ð·Ð²Ð°Ð½Ð¸ÑŽ
+     * @brief Поиск инструментов по query
      */
     std::vector<BrokerInstrument> searchInstruments(const std::string& query) const {
         std::lock_guard<std::mutex> lock(mutex_);
         std::vector<BrokerInstrument> result;
         
-        std::string q = query;
-        std::transform(q.begin(), q.end(), q.begin(), ::tolower);
-        
         for (const auto& [figi, instr] : instruments_) {
-            std::string ticker = instr.ticker;
-            std::transform(ticker.begin(), ticker.end(), ticker.begin(), ::tolower);
-            std::string name = instr.name;
-            std::transform(name.begin(), name.end(), name.begin(), ::tolower);
-            
-            if (ticker.find(q) != std::string::npos || name.find(q) != std::string::npos) {
+            if (instr.ticker.find(query) != std::string::npos ||
+                instr.name.find(query) != std::string::npos ||
+                instr.figi.find(query) != std::string::npos) {
                 result.push_back(instr);
             }
         }
@@ -479,36 +433,64 @@ public:
     // ========================================================================
     
     /**
-     * @brief ÐŸÐ¾Ð»ÑƒÑ‡Ð¸Ñ‚ÑŒ Ð¿Ð¾Ñ€Ñ‚Ñ„ÐµÐ»ÑŒ Ð°ÐºÐºÐ°ÑƒÐ½Ñ‚Ð°
+     * @brief Получить портфель аккаунта
      */
-    std::optional<BrokerPortfolio> getPortfolio(const std::string& accountId) const {
+    BrokerPortfolio getPortfolio(const std::string& accountId) const {
         std::lock_guard<std::mutex> lock(mutex_);
-        
-        auto it = accounts_.find(accountId);
-        if (it == accounts_.end()) {
-            return std::nullopt;
-        }
         
         BrokerPortfolio portfolio;
         portfolio.accountId = accountId;
-        portfolio.cash = it->second.cash;
-        portfolio.currency = "RUB";
         
-        for (const auto& [figi, pos] : it->second.positions) {
-            BrokerPosition bpos;
-            bpos.figi = figi;
-            bpos.ticker = pos.ticker;
-            bpos.quantity = pos.quantity;
-            bpos.averagePrice = pos.averagePrice;
+        auto it = accounts_.find(accountId);
+        if (it == accounts_.end()) {
+            return portfolio;
+        }
+        
+        const auto& account = it->second;
+        portfolio.cash = account.cash;
+        
+        for (const auto& [figi, posData] : account.positions) {
+            BrokerPosition pos;
+            pos.figi = figi;
+            pos.ticker = posData.ticker;
+            pos.quantity = posData.quantity;
+            pos.averagePrice = posData.averagePrice;
             
-            // ÐžÐ±Ð½Ð¾Ð²Ð»ÑÐµÐ¼ Ñ‚ÐµÐºÑƒÑ‰ÑƒÑŽ Ñ†ÐµÐ½Ñƒ
+            // Текущая цена из симулятора (без блокировки - уже под mutex_)
             auto quote = priceSimulator_->getQuote(figi);
-            bpos.currentPrice = quote ? quote->last : pos.averagePrice;
+            if (quote) {
+                pos.currentPrice = quote->last;
+            } else {
+                pos.currentPrice = pos.averagePrice;
+            }
             
-            portfolio.positions.push_back(bpos);
+            portfolio.positions.push_back(pos);
         }
         
         return portfolio;
+    }
+    
+    /**
+     * @brief Получить баланс
+     */
+    double getBalance(const std::string& accountId) const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto it = accounts_.find(accountId);
+        if (it != accounts_.end()) {
+            return it->second.cash;
+        }
+        return 0.0;
+    }
+    
+    /**
+     * @brief Установить баланс аккаунта (для тестов)
+     */
+    void setCash(const std::string& accountId, double cash) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto it = accounts_.find(accountId);
+        if (it != accounts_.end()) {
+            it->second.cash = cash;
+        }
     }
     
     // ========================================================================
@@ -516,22 +498,21 @@ public:
     // ========================================================================
     
     /**
-     * @brief Ð Ð°Ð·Ð¼ÐµÑÑ‚Ð¸Ñ‚ÑŒ Ð¾Ñ€Ð´ÐµÑ€
+     * @brief Разместить ордер
      */
     BrokerOrderResult placeOrder(const std::string& accountId, const BrokerOrderRequest& request) {
-        // 1. ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼ Ð°ÐºÐºÐ°ÑƒÐ½Ñ‚
+        // 1. Проверяем аккаунт
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            auto it = accounts_.find(accountId);
-            if (it == accounts_.end()) {
+            if (accounts_.find(accountId) == accounts_.end()) {
                 BrokerOrderResult result;
                 result.status = Status::REJECTED;
-                result.message = "Account not found: " + accountId;
+                result.message = "Account not found";
                 return result;
             }
         }
         
-        // 2. ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼ Ð¸Ð½ÑÑ‚Ñ€ÑƒÐ¼ÐµÐ½Ñ‚
+        // 2. Проверяем инструмент
         auto instrOpt = getInstrument(request.figi);
         if (!instrOpt) {
             BrokerOrderResult result;
@@ -540,35 +521,45 @@ public:
             return result;
         }
         
-        // 3. ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÐµÐ¼ Ð´Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ñ‡Ð½Ð¾ÑÑ‚ÑŒ ÑÑ€ÐµÐ´ÑÑ‚Ð²/Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¸
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            auto& account = accounts_[accountId];
-            
-            auto quote = priceSimulator_->getQuote(request.figi);
-            double price = quote ? quote->ask : 0.0;
+        // 3. Проверяем баланс для покупки
+        if (request.direction == Direction::BUY) {
+            auto quote = getQuote(request.figi);
+            double price = (request.type == Type::MARKET && quote)
+                ? quote->askPrice
+                : request.price;
             double totalCost = price * request.quantity * instrOpt->lot;
             
-            if (request.direction == Direction::BUY) {
-                if (account.cash < totalCost) {
-                    BrokerOrderResult result;
-                    result.status = Status::REJECTED;
-                    result.message = "Insufficient funds";
-                    return result;
-                }
-            } else {
-                int64_t requiredShares = request.quantity * instrOpt->lot;
-                auto posIt = account.positions.find(request.figi);
-                if (posIt == account.positions.end() || posIt->second.quantity < requiredShares) {
-                    BrokerOrderResult result;
-                    result.status = Status::REJECTED;
-                    result.message = "Insufficient position";
-                    return result;
-                }
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (accounts_[accountId].cash < totalCost) {
+                BrokerOrderResult result;
+                result.status = Status::REJECTED;
+                result.message = "Insufficient funds";
+                return result;
             }
         }
         
-        // 4. ÐžÐ±Ñ€Ð°Ð±Ð°Ñ‚Ñ‹Ð²Ð°ÐµÐ¼ Ð¾Ñ€Ð´ÐµÑ€ Ñ‡ÐµÑ€ÐµÐ· OrderProcessor
+        // 3.5. Проверяем позицию для продажи (короткие продажи запрещены)
+        if (request.direction == Direction::SELL) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            auto& account = accounts_[accountId];
+            auto posIt = account.positions.find(request.figi);
+            
+            int64_t availableQuantity = 0;
+            if (posIt != account.positions.end()) {
+                availableQuantity = posIt->second.quantity / instrOpt->lot;  // в лотах
+            }
+            
+            if (availableQuantity < request.quantity) {
+                BrokerOrderResult result;
+                result.status = Status::REJECTED;
+                result.message = "Insufficient position: have " + 
+                    std::to_string(availableQuantity) + " lots, need " + 
+                    std::to_string(request.quantity);
+                return result;
+            }
+        }
+        
+        // 4. Обрабатываем ордер
         OrderRequest procRequest;
         procRequest.accountId = accountId;
         procRequest.figi = request.figi;
@@ -580,12 +571,12 @@ public:
         auto scenario = getScenario(request.figi);
         auto procResult = orderProcessor_->processOrder(procRequest, scenario);
         
-        // 5. Ð•ÑÐ»Ð¸ Ð¸ÑÐ¿Ð¾Ð»Ð½ÐµÐ½ â€” Ð¾Ð±Ð½Ð¾Ð²Ð»ÑÐµÐ¼ Ð¿Ð¾Ñ€Ñ‚Ñ„ÐµÐ»ÑŒ
+        // 5. Если исполнен — обновляем портфель
         if (procResult.status == Status::FILLED || procResult.status == Status::PARTIALLY_FILLED) {
             executeOrder(accountId, request, *instrOpt, procResult);
         }
         
-        // 6. ÐšÐ¾Ð½Ð²ÐµÑ€Ñ‚Ð¸Ñ€ÑƒÐµÐ¼ Ñ€ÐµÐ·ÑƒÐ»ÑŒÑ‚Ð°Ñ‚
+        // 6. Конвертируем результат
         BrokerOrderResult result;
         result.orderId = procResult.orderId;
         result.status = procResult.status;
@@ -597,25 +588,25 @@ public:
     }
     
     /**
-     * @brief ÐžÑ‚Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ Ð¾Ñ€Ð´ÐµÑ€
+     * @brief Отменить ордер
      */
     bool cancelOrder(const std::string& accountId, const std::string& orderId) {
         return orderProcessor_->cancelOrder(orderId);
     }
     
     /**
-     * @brief ÐŸÐ¾Ð»ÑƒÑ‡Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ pending Ð¾Ñ€Ð´ÐµÑ€Ð¾Ð²
+     * @brief Получить количество pending ордеров
      */
     size_t pendingOrderCount() const {
         return orderProcessor_->pendingCount();
     }
     
     // ========================================================================
-    // RESET (Ð´Ð»Ñ Ñ‚ÐµÑÑ‚Ð¾Ð²)
+    // RESET (для тестов)
     // ========================================================================
     
     /**
-     * @brief Ð¡Ð±Ñ€Ð¾ÑÐ¸Ñ‚ÑŒ ÑÐ¾ÑÑ‚Ð¾ÑÐ½Ð¸Ðµ Ð±Ñ€Ð¾ÐºÐµÑ€Ð°
+     * @brief Сбросить состояние брокера
      */
     void reset() {
         stopSimulation();
@@ -630,20 +621,21 @@ public:
     }
 
 private:
+    std::shared_ptr<settings::BrokerSettings> settings_;
     std::shared_ptr<PriceSimulator> priceSimulator_;
     std::shared_ptr<OrderProcessor> orderProcessor_;
     std::shared_ptr<BackgroundTicker> ticker_;
     
     mutable std::mutex mutex_;
     
-    // Ð¡Ñ†ÐµÐ½Ð°Ñ€Ð¸Ð¸
+    // Сценарии
     MarketScenario defaultScenario_;
     std::unordered_map<std::string, MarketScenario> scenarios_;
     
-    // Ð˜Ð½ÑÑ‚Ñ€ÑƒÐ¼ÐµÐ½Ñ‚Ñ‹
+    // Инструменты
     std::unordered_map<std::string, BrokerInstrument> instruments_;
     
-    // ÐÐºÐºÐ°ÑƒÐ½Ñ‚Ñ‹
+    // Аккаунты
     struct PositionData {
         std::string ticker;
         int64_t quantity = 0;
@@ -664,35 +656,35 @@ private:
     
     void initDefaultInstruments() {
         // SBER
-        instruments_["BBG004730N88"] = {"BBG004730N88", "SBER", "Ð¡Ð±ÐµÑ€Ð±Ð°Ð½Ðº", "RUB", 10, 0.01};
+        instruments_["BBG004730N88"] = {"BBG004730N88", "SBER", "Сбербанк", "RUB", 10, 0.01};
         priceSimulator_->initInstrument("BBG004730N88", 280.0, 0.001, 0.002);
         ticker_->addInstrument("BBG004730N88");
         
         // GAZP
-        instruments_["BBG004730RP0"] = {"BBG004730RP0", "GAZP", "Ð“Ð°Ð·Ð¿Ñ€Ð¾Ð¼", "RUB", 10, 0.01};
+        instruments_["BBG004730RP0"] = {"BBG004730RP0", "GAZP", "Газпром", "RUB", 10, 0.01};
         priceSimulator_->initInstrument("BBG004730RP0", 160.0, 0.001, 0.003);
         ticker_->addInstrument("BBG004730RP0");
         
         // YNDX
-        instruments_["BBG006L8G4H1"] = {"BBG006L8G4H1", "YNDX", "Ð¯Ð½Ð´ÐµÐºÑ", "RUB", 1, 0.1};
+        instruments_["BBG006L8G4H1"] = {"BBG006L8G4H1", "YNDX", "Яндекс", "RUB", 1, 0.1};
         priceSimulator_->initInstrument("BBG006L8G4H1", 3500.0, 0.002, 0.004);
         ticker_->addInstrument("BBG006L8G4H1");
         
         // LKOH
-        instruments_["BBG004731032"] = {"BBG004731032", "LKOH", "Ð›ÑƒÐºÐ¾Ð¹Ð»", "RUB", 1, 0.5};
+        instruments_["BBG004731032"] = {"BBG004731032", "LKOH", "Лукойл", "RUB", 1, 0.5};
         priceSimulator_->initInstrument("BBG004731032", 7200.0, 0.001, 0.002);
         ticker_->addInstrument("BBG004731032");
         
         // MGNT
-        instruments_["BBG004RVFCY3"] = {"BBG004RVFCY3", "MGNT", "ÐœÐ°Ð³Ð½Ð¸Ñ‚", "RUB", 1, 0.5};
+        instruments_["BBG004RVFCY3"] = {"BBG004RVFCY3", "MGNT", "Магнит", "RUB", 1, 0.5};
         priceSimulator_->initInstrument("BBG004RVFCY3", 5500.0, 0.002, 0.003);
         ticker_->addInstrument("BBG004RVFCY3");
     }
     
     void setupCallbacks() {
-        // Callback Ð¾Ñ‚ OrderProcessor Ð¿Ñ€Ð¸ Ð¸ÑÐ¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ð¸ pending Ð¾Ñ€Ð´ÐµÑ€Ð¾Ð²
+        // Callback от OrderProcessor при исполнении pending ордеров
         orderProcessor_->setFillCallback([this](const OrderFillEvent& e) {
-            // ÐžÐ±Ð½Ð¾Ð²Ð»ÑÐµÐ¼ Ð¿Ð¾Ñ€Ñ‚Ñ„ÐµÐ»ÑŒ
+            // Обновляем портфель
             auto instrOpt = getInstrument(e.figi);
             if (instrOpt) {
                 BrokerOrderRequest req;
@@ -710,7 +702,7 @@ private:
                 executeOrder(e.accountId, req, *instrOpt, procResult);
             }
             
-            // Ð’Ñ‹Ð·Ñ‹Ð²Ð°ÐµÐ¼ Ð²Ð½ÐµÑˆÐ½Ð¸Ð¹ callback
+            // Вызываем внешний callback
             OrderFillEventCallback cb;
             {
                 std::lock_guard<std::mutex> lock(mutex_);
@@ -754,7 +746,7 @@ private:
                 pos.averagePrice = result.executedPrice;
                 pos.quantity = totalShares;
             } else {
-                // Ð¡Ñ€ÐµÐ´Ð½ÑÑ Ñ†ÐµÐ½Ð°
+                // Средняя цена
                 double newAvg = (pos.averagePrice * pos.quantity + 
                                 result.executedPrice * totalShares) /
                                (pos.quantity + totalShares);
@@ -776,4 +768,3 @@ private:
 };
 
 } // namespace broker::adapters::secondary
-
