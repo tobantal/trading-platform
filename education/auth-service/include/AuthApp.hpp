@@ -33,6 +33,7 @@
 #include "adapters/primary/GetAccountsHandler.hpp"
 #include "adapters/primary/AddAccountHandler.hpp"
 #include "adapters/primary/DeleteAccountHandler.hpp"
+#include "adapters/primary/GetAccessTokenHandler.hpp"
 
 #include <memory>
 #include <iostream>
@@ -160,6 +161,13 @@ protected:
             std::cout << "  ✓ ValidateTokenHandler: POST /api/v1/auth/validate" << std::endl;
         }
 
+        // Access Token Handler
+        {
+            auto handler = injector.create<std::shared_ptr<adapters::primary::GetAccessTokenHandler>>();
+            handlers_[getHandlerKey("POST", "/api/v1/auth/access-token")] = handler;
+            std::cout << "  ✓ GetAccessTokenHandler: POST /api/v1/auth/access-token" << std::endl;
+        }
+
         // Account Handlers
         {
             auto handler = injector.create<std::shared_ptr<adapters::primary::GetAccountsHandler>>();
@@ -179,7 +187,7 @@ protected:
             std::cout << "  ✓ DeleteAccountHandler: DELETE /api/v1/accounts/*" << std::endl;
         }
 
-        std::cout << "[AuthApp] Configuration complete! 9 handlers registered." << std::endl;
+        std::cout << "[AuthApp] Configuration complete! 10 handlers registered." << std::endl;
     }
 };
 

@@ -10,6 +10,23 @@
 - Управление брокерскими аккаунтами (sandbox/real)
 - Валидация токенов (внутренний API для других сервисов)
 
+## Двухуровневая система токенов
+
+| Token | Содержит | Для чего | TTL |
+|-------|----------|----------|-----|
+| session_token | user_id | Управление в auth-service (аккаунты, logout) | 24 часа |
+| access_token | user_id + account_id | Работа в trading-service (ордера, портфель) | 1 час |
+
+### Flow аутентификации
+
+```
+1. POST /api/v1/auth/register       → Регистрация
+2. POST /api/v1/auth/login          → session_token
+3. GET  /api/v1/accounts            → Список аккаунтов (с session_token)
+4. POST /api/v1/auth/access-token   → access_token (выбор аккаунта)
+5. Trading Service requests         → с access_token в Authorization header
+```
+
 ## API Endpoints
 
 | Method | Endpoint | Описание | Auth |
@@ -17,12 +34,102 @@
 | GET | `/health` | Health check | - |
 | GET | `/metrics` | Prometheus metrics | - |
 | POST | `/api/v1/auth/register` | Регистрация | - |
-| POST | `/api/v1/auth/login` | Логин | - |
+| POST | `/api/v1/auth/login` | Логин → session_token | - |
 | POST | `/api/v1/auth/logout` | Выход | Session Token |
 | POST | `/api/v1/auth/validate` | Валидация токена | - |
+| **POST** | **`/api/v1/auth/access-token`** | **Получить access_token** | **Session Token** |
 | GET | `/api/v1/accounts` | Список аккаунтов | Session Token |
 | POST | `/api/v1/accounts` | Создать аккаунт | Session Token |
 | DELETE | `/api/v1/accounts/{id}` | Удалить аккаунт | Session Token |
+
+## Примеры запросов
+
+### Регистрация
+
+```bash
+curl -X POST http://arch.homework/auth/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "john", "email": "john@example.com", "password": "secret123"}'
+
+# Response:
+# {"user_id": "user-xxx", "message": "User registered successfully"}
+```
+
+### Логин
+
+```bash
+curl -X POST http://arch.homework/auth/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "testuser", "password": "test123"}'
+
+# Response:
+# {"session_token": "eyJ...", "user_id": "user-test-001", "message": "Login successful"}
+```
+
+### Получить список аккаунтов
+
+```bash
+curl http://arch.homework/auth/api/v1/accounts \
+  -H "Authorization: Bearer <session_token>"
+
+# Response:
+# {"accounts": [{"account_id": "acc-sandbox-001", "name": "Test Sandbox", "type": "SANDBOX"}]}
+```
+
+### Получить access_token
+
+```bash
+curl -X POST http://arch.homework/auth/api/v1/auth/access-token \
+  -H "Authorization: Bearer <session_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"account_id": "acc-sandbox-001"}'
+
+# Response:
+# {
+#   "access_token": "eyJ...",
+#   "user_id": "user-test-001",
+#   "account_id": "acc-sandbox-001",
+#   "token_type": "Bearer",
+#   "expires_in": 3600
+# }
+```
+
+### Использование access_token в Trading Service
+
+```bash
+curl http://arch.homework/trading/api/v1/orders \
+  -H "Authorization: Bearer <access_token>"
+
+# Trading Service валидирует access_token через auth-service
+# и получает user_id + account_id для операций
+```
+
+### Валидация токена (внутренний API)
+
+```bash
+# Валидация session_token
+curl -X POST http://arch.homework/auth/api/v1/auth/validate \
+  -H "Content-Type: application/json" \
+  -d '{"token": "<session_token>", "type": "session"}'
+
+# Response: {"valid": true, "user_id": "user-xxx"}
+
+# Валидация access_token
+curl -X POST http://arch.homework/auth/api/v1/auth/validate \
+  -H "Content-Type: application/json" \
+  -d '{"token": "<access_token>", "type": "access"}'
+
+# Response: {"valid": true, "user_id": "user-xxx", "account_id": "acc-xxx"}
+```
+
+### Создать аккаунт
+
+```bash
+curl -X POST http://arch.homework/auth/api/v1/accounts \
+  -H "Authorization: Bearer <session_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "My Sandbox", "type": "SANDBOX", "tinkoff_token": "fake-token"}'
+```
 
 ## Структура проекта
 
@@ -36,6 +143,8 @@ auth-service/
 │   ├── AuthApp.hpp
 │   ├── adapters/
 │   │   ├── primary/           # HTTP handlers
+│   │   │   ├── GetAccessTokenHandler.hpp  ← НОВЫЙ
+│   │   │   └── ...
 │   │   └── secondary/         # PostgreSQL, JWT
 │   ├── application/           # Business logic
 │   ├── domain/                # Entities, enums
@@ -49,7 +158,8 @@ auth-service/
     ├── mocks/                 # InMemory repositories
     ├── AuthServiceTest.cpp
     ├── AccountServiceTest.cpp
-    └── AuthEndpointTest.cpp
+    ├── AuthEndpointTest.cpp
+    └── GetAccessTokenHandlerTest.cpp  ← НОВЫЙ
 ```
 
 ## Локальная разработка
@@ -176,43 +286,6 @@ INSERT INTO users VALUES ('user-test-001', 'testuser', 'test@example.com', 'hash
 INSERT INTO accounts VALUES ('acc-sandbox-001', 'user-test-001', 'Test Sandbox', 'SANDBOX', 'enc:fake-token', NOW());
 ```
 
-## Примеры запросов
-
-### Регистрация
-
-```bash
-curl -X POST http://arch.homework/auth/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username": "john", "email": "john@example.com", "password": "secret123"}'
-```
-
-### Логин
-
-```bash
-curl -X POST http://arch.homework/auth/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "testuser", "password": "test123"}'
-
-# Response:
-# {"session_token": "eyJ...", "user_id": "user-test-001", "message": "Login successful"}
-```
-
-### Получить аккаунты
-
-```bash
-curl http://arch.homework/auth/api/v1/accounts \
-  -H "Authorization: Bearer eyJ..."
-```
-
-### Создать аккаунт
-
-```bash
-curl -X POST http://arch.homework/auth/api/v1/accounts \
-  -H "Authorization: Bearer eyJ..." \
-  -H "Content-Type: application/json" \
-  -d '{"name": "My Sandbox", "type": "SANDBOX", "tinkoff_token": "fake-token"}'
-```
-
 ## Postman
 
 Коллекция для тестирования: `postman/auth-service.postman_collection.json`
@@ -238,7 +311,7 @@ newman run postman/auth-service.postman_collection.json
 | `AUTH_DB_NAME` | Имя базы данных | auth_db |
 | `AUTH_DB_USER` | Пользователь БД | auth_user |
 | `AUTH_DB_PASSWORD` | Пароль БД | **обязательно** |
-| `JWT_SECRET` | Секрет для JWT | - |
+| `AUTH_SESSION_LIFETIME` | TTL session токена (сек) | 86400 |
 
 ## Взаимодействие с другими сервисами
 

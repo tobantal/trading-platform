@@ -16,6 +16,11 @@
       "type": "string"
     },
     {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
       "key": "userId",
       "value": "",
       "type": "string"
@@ -265,7 +270,7 @@
       "name": "3. Token Validation",
       "item": [
         {
-          "name": "Validate Valid Session Token",
+          "name": "Validate Session Token",
           "event": [
             {
               "listen": "test",
@@ -462,7 +467,227 @@
       ]
     },
     {
-      "name": "5. Logout",
+      "name": "5. Access Token",
+      "item": [
+        {
+          "name": "Get Access Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Access token returned', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.access_token).to.not.be.empty;",
+                  "    pm.expect(json.user_id).to.not.be.empty;",
+                  "    pm.expect(json.account_id).to.not.be.empty;",
+                  "    pm.expect(json.token_type).to.eql('Bearer');",
+                  "    pm.expect(json.expires_in).to.eql(3600);",
+                  "    ",
+                  "    pm.collectionVariables.set('accessToken', json.access_token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{sessionToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"account_id\": \"{{accountId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/access-token",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "access-token"]
+            }
+          }
+        },
+        {
+          "name": "Get Access Token - No Auth",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401 Unauthorized', function() {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "",
+                  "pm.test('Error message', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.error).to.not.be.empty;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"account_id\": \"acc-sandbox-001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/access-token",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "access-token"]
+            }
+          }
+        },
+        {
+          "name": "Get Access Token - Missing Account ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 Bad Request', function() {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error about account_id', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.error).to.include('account_id');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{sessionToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/access-token",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "access-token"]
+            }
+          }
+        },
+        {
+          "name": "Get Access Token - Wrong Account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 403 Forbidden', function() {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "",
+                  "pm.test('Error about ownership', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.error).to.include('does not belong');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{sessionToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"account_id\": \"acc-not-mine-12345\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/access-token",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "access-token"]
+            }
+          }
+        },
+        {
+          "name": "Validate Access Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Access token is valid with account_id', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.valid).to.be.true;",
+                  "    pm.expect(json.user_id).to.not.be.empty;",
+                  "    pm.expect(json.account_id).to.not.be.empty;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"token\": \"{{accessToken}}\",\n    \"type\": \"access\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/validate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "validate"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Logout",
       "item": [
         {
           "name": "Logout",
