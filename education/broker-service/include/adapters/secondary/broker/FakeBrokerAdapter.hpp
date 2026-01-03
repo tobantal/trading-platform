@@ -269,6 +269,9 @@ public:
             } else {
                 throw std::runtime_error("Account not found: " + accountId);
             }
+        } else {
+            // Аккаунт в БД, но может отсутствовать в broker_ после рестарта
+            ensureAccountInBroker(accountId);
         }
         
         domain::Portfolio portfolio;
@@ -312,6 +315,9 @@ public:
                 rejected.message = "Account not found: " + accountId;
                 return rejected;
             }
+        } else {
+            // Аккаунт в БД, но может отсутствовать в broker_ после рестарта
+            ensureAccountInBroker(accountId);
         }
         
         // Конвертируем запрос
@@ -330,6 +336,11 @@ public:
         // Сохраняем в БД
         if (result.status != domain::OrderStatus::REJECTED) {
             persistOrder(result.orderId, accountId, request, result);
+            
+            // Если ордер исполнен сразу (MARKET) - обновляем баланс и позиции
+            if (result.status == domain::OrderStatus::FILLED) {
+                persistBalanceAndPositions(accountId);
+            }
             
             // Публикуем событие
             if (eventPublisher_) {
@@ -385,6 +396,9 @@ public:
             } else {
                 throw std::runtime_error("Account not found: " + accountId);
             }
+        } else {
+            // Аккаунт в БД, но может отсутствовать в broker_ после рестарта
+            ensureAccountInBroker(accountId);
         }
         
         std::vector<domain::Order> result;
@@ -497,6 +511,38 @@ private:
         }
         
         std::cout << "[FakeBrokerAdapter] Database load complete" << std::endl;
+    }
+    
+    /**
+     * @brief Убедиться что аккаунт зарегистрирован в broker_
+     * Синхронизирует БД с in-memory broker_ (lazy loading)
+     */
+    void ensureAccountInBroker(const std::string& accountId) {
+        if (broker_->hasAccount(accountId)) {
+            return;
+        }
+        
+        if (balanceRepo_) {
+            auto balance = balanceRepo_->findByAccountId(accountId);
+            if (balance) {
+                double cash = balance->available / 100.0;
+                broker_->registerAccount(accountId, "restored-" + accountId, cash);
+                std::cout << "[FakeBrokerAdapter] Restored account: " << accountId
+                          << " cash=" << cash << std::endl;
+                
+                if (positionRepo_) {
+                    auto positions = positionRepo_->findByAccountId(accountId);
+                    for (const auto& pos : positions) {
+                        std::string ticker = pos.figi;
+                        auto instr = getInstrumentByFigi(pos.figi);
+                        if (instr) ticker = instr->ticker;
+                        
+                        broker_->importPosition(accountId, pos.figi, ticker,
+                                                pos.quantity, pos.averagePrice);
+                    }
+                }
+            }
+        }
     }
     
     void setupEventCallbacks() {

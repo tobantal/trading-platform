@@ -358,6 +358,22 @@ public:
         return accounts_.find(accountId) != accounts_.end();
     }
     
+    /**
+     * @brief Импортировать позицию (для восстановления из БД)
+     */
+    void importPosition(const std::string& accountId, const std::string& figi, 
+                        const std::string& ticker, int64_t quantity, double averagePrice) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto it = accounts_.find(accountId);
+        if (it != accounts_.end()) {
+            PositionData pos;
+            pos.ticker = ticker;
+            pos.quantity = quantity;
+            pos.averagePrice = averagePrice;
+            it->second.positions[figi] = pos;
+        }
+    }
+    
     // ========================================================================
     // MARKET DATA
     // ========================================================================
