@@ -24,7 +24,7 @@ tree
 echo
 
 # Поиск и вывод содержимого файлов .h, .hpp, .cpp с заголовками + CMakeLists.txt, ci.yml
-find . -type f \( -name "*.h" -o -name "*.hpp" -o -name "*.cpp" -o -name "CMakeLists.txt" -o -name "*.yml" -o -name "*.yaml" -o -name "Dockerfile" -o -name "nginx.conf" -o -name "config.json" \) | sort | while read -r file; do
+find . -type f \( -name "*.h" -o -name "*.hpp" -o -name "*.cpp" -o -name "CMakeLists.txt" -o -name "*.yml" -o -name "*.yaml" -o -name "Dockerfile" -o -name "nginx.conf" -o -name "*.json" \) | sort | while read -r file; do
     # Убираем префикс ./ для вывода относительно проекта
     relative_path="${file#./}"
     echo "===== $relative_path ====="
