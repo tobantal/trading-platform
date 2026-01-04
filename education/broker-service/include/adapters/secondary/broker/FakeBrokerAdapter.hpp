@@ -4,12 +4,11 @@
  * 
  * Ключевые особенности:
  * 1. Автоматическая регистрация ТОЛЬКО sandbox-аккаунтов
- *    (accountId содержит "sandbox")
  * 2. Персистентность через PostgreSQL репозитории
- * 3. Кэширование через ShardedCache (без TTL - данные живут вечно)
- * 4. БД - единственный источник правды, кэш восстанавливается из БД при старте
- * 5. Транзакционность: если запись в БД не удалась, кэш НЕ обновляется
- * 6. EnhancedFakeBroker инжектится через DI
+ * 3. Кэширование через ShardedCache (без TTL)
+ * 4. БД - единственный источник правды
+ * 5. EnhancedFakeBroker инжектится через DI
+ * 6. Публикация portfolio.updated после исполнения ордеров
  */
 #pragma once
 
@@ -31,6 +30,7 @@
 #include <cache/Cache.hpp>
 #include <cache/eviction/LRUPolicy.hpp>
 
+#include <nlohmann/json.hpp>
 #include <memory>
 #include <iostream>
 #include <string>
@@ -48,22 +48,9 @@ constexpr double SANDBOX_INITIAL_BALANCE = 100000.0;  // 100,000 RUB
 
 /**
  * @brief Адаптер брокера с кэшированием и персистентностью
- * 
- * ЕДИНСТВЕННЫЙ КОНСТРУКТОР - все зависимости обязательны и инжектятся через DI.
  */
 class FakeBrokerAdapter : public ports::output::IBrokerGateway {
 public:
-    /**
-     * @brief Конструктор
-     * 
-     * @param broker EnhancedFakeBroker (инжектится через DI)
-     * @param eventPublisher Издатель событий (RabbitMQ)
-     * @param balanceRepo Репозиторий балансов
-     * @param positionRepo Репозиторий позиций
-     * @param orderRepo Репозиторий ордеров
-     * @param quoteRepo Репозиторий котировок
-     * @param instrumentRepo Репозиторий инструментов
-     */
     FakeBrokerAdapter(
         std::shared_ptr<EnhancedFakeBroker> broker,
         std::shared_ptr<ports::output::IEventPublisher> eventPublisher,
@@ -115,25 +102,21 @@ public:
         const std::string& accountId,
         const std::string& accessToken) override
     {
-        // Регистрируем только sandbox-аккаунты
         if (!isSandboxAccount(accountId)) {
             throw std::runtime_error("Only sandbox accounts can be auto-registered. "
                                      "Account ID must contain 'sandbox'");
         }
         
-        // Проверяем, не существует ли уже
         if (balanceCache_->contains(accountId)) {
-            return;  // Уже зарегистрирован
+            return;
         }
         
-        // Создаём баланс
         domain::BrokerBalance balance;
         balance.accountId = accountId;
-        balance.available = static_cast<int64_t>(SANDBOX_INITIAL_BALANCE * 100);  // в копейках
+        balance.available = static_cast<int64_t>(SANDBOX_INITIAL_BALANCE * 100);
         balance.reserved = 0;
         balance.currency = "RUB";
         
-        // Сначала БД, потом кэш
         if (balanceRepo_) {
             try {
                 balanceRepo_->save(balance);
@@ -141,21 +124,18 @@ public:
                 std::cout << "[FakeBrokerAdapter] Registered sandbox account: " << accountId << std::endl;
             } catch (const std::exception& e) {
                 std::cerr << "[FakeBrokerAdapter] Failed to persist account: " << e.what() << std::endl;
-                throw;  // Не регистрируем если БД недоступна
+                throw;
             }
         } else {
-            // Без БД - только в память (для тестов)
             balanceCache_->put(accountId, balance);
         }
         
-        // Регистрируем в симуляторе
         broker_->registerAccount(accountId, accessToken, SANDBOX_INITIAL_BALANCE);
     }
     
     void unregisterAccount(const std::string& accountId) override {
         broker_->unregisterAccount(accountId);
         balanceCache_->remove(accountId);
-        // TODO: удалить из БД если нужно
     }
     
     // ========================================================================
@@ -163,13 +143,11 @@ public:
     // ========================================================================
     
     std::optional<domain::Quote> getQuote(const std::string& figi) override {
-        // 1. Проверяем кэш
         auto cached = quoteCache_->get(figi);
         if (cached) {
             return cached;
         }
         
-        // 2. БД
         if (quoteRepo_) {
             auto fromDb = quoteRepo_->findByFigi(figi);
             if (fromDb) {
@@ -178,7 +156,6 @@ public:
             }
         }
         
-        // 3. Симулятор
         auto brokerQuote = broker_->getQuote(figi);
         if (brokerQuote) {
             auto quote = convertQuote(*brokerQuote);
@@ -200,13 +177,11 @@ public:
     }
     
     std::optional<domain::Instrument> getInstrumentByFigi(const std::string& figi) override {
-        // 1. Кэш
         auto cached = instrumentCache_->get(figi);
         if (cached) {
             return cached;
         }
         
-        // 2. БД
         if (instrumentRepo_) {
             auto fromDb = instrumentRepo_->findByFigi(figi);
             if (fromDb) {
@@ -215,7 +190,6 @@ public:
             }
         }
         
-        // 3. Симулятор
         auto brokerInstr = broker_->getInstrument(figi);
         if (brokerInstr) {
             auto instr = convertInstrument(*brokerInstr);
@@ -227,7 +201,6 @@ public:
     }
     
     std::vector<domain::Instrument> getAllInstruments() override {
-        // Из БД (источник правды)
         if (instrumentRepo_) {
             auto instruments = instrumentRepo_->findAll();
             for (const auto& instr : instruments) {
@@ -236,7 +209,6 @@ public:
             return instruments;
         }
         
-        // Из симулятора
         std::vector<domain::Instrument> result;
         for (const auto& bi : broker_->getAllInstruments()) {
             result.push_back(convertInstrument(bi));
@@ -245,7 +217,6 @@ public:
     }
     
     std::vector<domain::Instrument> searchInstruments(const std::string& query) override {
-        // Используем поиск в симуляторе
         auto brokerInstruments = broker_->searchInstruments(query);
         std::vector<domain::Instrument> result;
         result.reserve(brokerInstruments.size());
@@ -261,33 +232,28 @@ public:
     // ========================================================================
     
     domain::Portfolio getPortfolio(const std::string& accountId) override {
-        // Проверяем существование аккаунта
         if (!accountExists(accountId)) {
-            // Пробуем авто-регистрацию sandbox
             if (isSandboxAccount(accountId)) {
                 registerAccount(accountId, "sandbox-token-" + accountId);
             } else {
                 throw std::runtime_error("Account not found: " + accountId);
             }
         } else {
-            // Аккаунт в БД, но может отсутствовать в broker_ после рестарта
             ensureAccountInBroker(accountId);
         }
         
         domain::Portfolio portfolio;
-        portfolio.accountId = accountId;
         
-        // Баланс из БД/кэша
         auto balance = getBalance(accountId);
         if (balance) {
             portfolio.cash = domain::Money::fromDouble(
-                balance->available / 100.0, balance->currency);
+                static_cast<double>(balance->available) / 100.0, 
+                balance->currency
+            );
         }
         
-        // Позиции
         portfolio.positions = getPositions(accountId);
         
-        // Total value
         double totalValue = portfolio.cash.toDouble();
         for (const auto& pos : portfolio.positions) {
             totalValue += pos.currentPrice.toDouble() * pos.quantity;
@@ -305,7 +271,6 @@ public:
         const std::string& accountId,
         const domain::OrderRequest& request) override
     {
-        // Проверяем/регистрируем аккаунт
         if (!accountExists(accountId)) {
             if (isSandboxAccount(accountId)) {
                 registerAccount(accountId, "sandbox-token-" + accountId);
@@ -316,11 +281,9 @@ public:
                 return rejected;
             }
         } else {
-            // Аккаунт в БД, но может отсутствовать в broker_ после рестарта
             ensureAccountInBroker(accountId);
         }
         
-        // Конвертируем запрос
         BrokerOrderRequest brokerReq;
         brokerReq.accountId = accountId;
         brokerReq.figi = request.figi;
@@ -329,20 +292,18 @@ public:
         brokerReq.quantity = request.quantity;
         brokerReq.price = request.price.toDouble();
         
-        // Размещаем через симулятор
         auto brokerResult = broker_->placeOrder(accountId, brokerReq);
         auto result = convertOrderResult(brokerResult);
         
-        // Сохраняем в БД
         if (result.status != domain::OrderStatus::REJECTED) {
             persistOrder(result.orderId, accountId, request, result);
             
-            // Если ордер исполнен сразу (MARKET) - обновляем баланс и позиции
             if (result.status == domain::OrderStatus::FILLED) {
                 persistBalanceAndPositions(accountId);
+                // Публикуем portfolio.updated после исполнения
+                publishPortfolioUpdate(accountId);
             }
             
-            // Публикуем событие
             if (eventPublisher_) {
                 domain::OrderCreatedEvent event;
                 event.orderId = result.orderId;
@@ -364,7 +325,6 @@ public:
     {
         bool cancelled = broker_->cancelOrder(accountId, orderId);
         
-        // Обновляем в БД
         if (cancelled && orderRepo_) {
             auto order = orderRepo_->findById(orderId);
             if (order) {
@@ -376,7 +336,6 @@ public:
             }
         }
         
-        // Публикуем событие
         if (cancelled && eventPublisher_) {
             domain::OrderCancelledEvent event;
             event.orderId = orderId;
@@ -388,16 +347,14 @@ public:
     }
     
     std::vector<domain::Order> getOrders(const std::string& accountId) override {
-        // Проверяем существование аккаунта
         if (!accountExists(accountId)) {
             if (isSandboxAccount(accountId)) {
                 registerAccount(accountId, "sandbox-token-" + accountId);
-                return {};  // Новый аккаунт - пустые ордера
+                return {};
             } else {
                 throw std::runtime_error("Account not found: " + accountId);
             }
         } else {
-            // Аккаунт в БД, но может отсутствовать в broker_ после рестарта
             ensureAccountInBroker(accountId);
         }
         
@@ -417,13 +374,11 @@ public:
         const std::string& accountId,
         const std::string& orderId) override
     {
-        // 1. Кэш
         auto cached = orderCache_->get(orderId);
         if (cached) {
             return convertBrokerOrderToOrder(*cached);
         }
         
-        // 2. БД
         if (orderRepo_) {
             auto fromDb = orderRepo_->findById(orderId);
             if (fromDb) {
@@ -440,7 +395,6 @@ public:
         const std::optional<std::chrono::system_clock::time_point>& from = std::nullopt,
         const std::optional<std::chrono::system_clock::time_point>& to = std::nullopt) override
     {
-        // TODO: фильтрация по дате
         return getOrders(accountId);
     }
 
@@ -454,7 +408,7 @@ private:
     std::shared_ptr<ports::output::IQuoteRepository> quoteRepo_;
     std::shared_ptr<ports::output::IInstrumentRepository> instrumentRepo_;
     
-    // Кэши (ShardedCache без TTL - данные живут вечно)
+    // Кэши
     std::unique_ptr<ShardedCache<std::string, domain::Quote, CACHE_SHARD_COUNT>> quoteCache_;
     std::unique_ptr<ShardedCache<std::string, domain::Instrument, CACHE_SHARD_COUNT>> instrumentCache_;
     std::unique_ptr<ShardedCache<std::string, domain::BrokerBalance, CACHE_SHARD_COUNT>> balanceCache_;
@@ -494,14 +448,9 @@ private:
             CACHE_CAPACITY, orderCacheFactory);
     }
     
-    /**
-     * @brief Загрузить данные из БД в кэши при старте
-     * БД - единственный источник правды
-     */
     void loadFromDatabase() {
         std::cout << "[FakeBrokerAdapter] Loading data from database..." << std::endl;
         
-        // Инструменты
         if (instrumentRepo_) {
             auto instruments = instrumentRepo_->findAll();
             for (const auto& instr : instruments) {
@@ -513,33 +462,20 @@ private:
         std::cout << "[FakeBrokerAdapter] Database load complete" << std::endl;
     }
     
-    /**
-     * @brief Убедиться что аккаунт зарегистрирован в broker_
-     * Синхронизирует БД с in-memory broker_ (lazy loading)
-     */
     void ensureAccountInBroker(const std::string& accountId) {
-        if (broker_->hasAccount(accountId)) {
-            return;
-        }
-        
-        if (balanceRepo_) {
-            auto balance = balanceRepo_->findByAccountId(accountId);
-            if (balance) {
-                double cash = balance->available / 100.0;
-                broker_->registerAccount(accountId, "restored-" + accountId, cash);
-                std::cout << "[FakeBrokerAdapter] Restored account: " << accountId
-                          << " cash=" << cash << std::endl;
-                
-                if (positionRepo_) {
-                    auto positions = positionRepo_->findByAccountId(accountId);
-                    for (const auto& pos : positions) {
-                        std::string ticker = pos.figi;
-                        auto instr = getInstrumentByFigi(pos.figi);
-                        if (instr) ticker = instr->ticker;
-                        
-                        broker_->importPosition(accountId, pos.figi, ticker,
-                                                pos.quantity, pos.averagePrice);
-                    }
+        if (!broker_->hasAccount(accountId)) {
+            auto balance = getBalance(accountId);
+            double cash = balance ? static_cast<double>(balance->available) / 100.0 : SANDBOX_INITIAL_BALANCE;
+            broker_->registerAccount(accountId, "restored-token", cash);
+            
+            if (positionRepo_) {
+                auto positions = positionRepo_->findByAccountId(accountId);
+                for (const auto& pos : positions) {
+                    std::string ticker = pos.figi;
+                    auto instr = getInstrumentByFigi(pos.figi);
+                    if (instr) ticker = instr->ticker;
+                    
+                    broker_->importPosition(accountId, pos.figi, ticker, pos.quantity, pos.averagePrice);
                 }
             }
         }
@@ -554,7 +490,6 @@ private:
             quote.bidPrice = domain::Money::fromDouble(e.bid, "RUB");
             quote.askPrice = domain::Money::fromDouble(e.ask, "RUB");
             
-            // Сначала БД, потом кэш
             if (quoteRepo_) {
                 try {
                     quoteRepo_->save(quote);
@@ -566,7 +501,6 @@ private:
                 quoteCache_->put(e.figi, quote);
             }
             
-            // Публикуем событие
             if (eventPublisher_) {
                 domain::QuoteUpdatedEvent event;
                 event.figi = e.figi;
@@ -579,8 +513,11 @@ private:
         
         // Callback для исполнения pending ордеров
         broker_->setOrderFillCallback([this](const BrokerOrderFillEvent& e) {
-            // Обновляем портфель
+            // Обновляем портфель в БД
             persistBalanceAndPositions(e.accountId);
+            
+            // *** ДОБАВЛЕНО: Публикуем portfolio.updated ***
+            publishPortfolioUpdate(e.accountId);
             
             // Обновляем ордер
             if (orderRepo_) {
@@ -610,6 +547,67 @@ private:
     }
     
     // ========================================================================
+    // PORTFOLIO UPDATE PUBLISHER (НОВЫЙ МЕТОД)
+    // ========================================================================
+    
+    /**
+     * @brief Публикует событие portfolio.updated в RabbitMQ
+     * 
+     * Вызывается после исполнения ордера для уведомления trading-service
+     * об изменении портфеля (позиций и баланса).
+     */
+    void publishPortfolioUpdate(const std::string& accountId) {
+        if (!eventPublisher_) return;
+        
+        try {
+            nlohmann::json event;
+            event["account_id"] = accountId;
+            event["timestamp"] = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            
+            // Баланс
+            auto balance = getBalance(accountId);
+            if (balance) {
+                event["cash"] = {
+                    {"amount", static_cast<double>(balance->available) / 100.0},
+                    {"currency", balance->currency}
+                };
+            }
+            
+            // Позиции
+            event["positions"] = nlohmann::json::array();
+            auto positions = getPositions(accountId);
+            for (const auto& pos : positions) {
+                nlohmann::json posJson;
+                posJson["figi"] = pos.figi;
+                posJson["ticker"] = pos.ticker;
+                posJson["quantity"] = pos.quantity;
+                posJson["average_price"] = pos.averagePrice.toDouble();
+                posJson["current_price"] = pos.currentPrice.toDouble();
+                posJson["currency"] = pos.averagePrice.currency;
+                event["positions"].push_back(posJson);
+            }
+            
+            // Общая стоимость
+            double totalValue = balance ? static_cast<double>(balance->available) / 100.0 : 0.0;
+            for (const auto& pos : positions) {
+                totalValue += pos.currentPrice.toDouble() * pos.quantity;
+            }
+            event["total_value"] = {
+                {"amount", totalValue},
+                {"currency", "RUB"}
+            };
+            
+            eventPublisher_->publish("portfolio.updated", event.dump());
+            
+            std::cout << "[FakeBrokerAdapter] Published portfolio.updated for " << accountId << std::endl;
+            
+        } catch (const std::exception& e) {
+            std::cerr << "[FakeBrokerAdapter] Failed to publish portfolio.updated: " << e.what() << std::endl;
+        }
+    }
+    
+    // ========================================================================
     // HELPER METHODS
     // ========================================================================
     
@@ -618,12 +616,10 @@ private:
     }
     
     bool accountExists(const std::string& accountId) const {
-        // Кэш
         if (balanceCache_->contains(accountId)) {
             return true;
         }
         
-        // БД
         if (balanceRepo_) {
             return balanceRepo_->findByAccountId(accountId).has_value();
         }
@@ -632,13 +628,11 @@ private:
     }
     
     std::optional<domain::BrokerBalance> getBalance(const std::string& accountId) {
-        // 1. Кэш
         auto cached = balanceCache_->get(accountId);
         if (cached) {
             return cached;
         }
         
-        // 2. БД
         if (balanceRepo_) {
             auto fromDb = balanceRepo_->findByAccountId(accountId);
             if (fromDb) {
@@ -724,7 +718,6 @@ private:
     void persistBalanceAndPositions(const std::string& accountId) {
         auto portfolio = broker_->getPortfolio(accountId);
         
-        // Баланс
         domain::BrokerBalance balance;
         balance.accountId = accountId;
         balance.available = static_cast<int64_t>(portfolio.cash * 100);
@@ -740,7 +733,6 @@ private:
             balanceCache_->put(accountId, balance);
         }
         
-        // Позиции
         if (positionRepo_) {
             for (const auto& pos : portfolio.positions) {
                 domain::BrokerPosition dbPos;

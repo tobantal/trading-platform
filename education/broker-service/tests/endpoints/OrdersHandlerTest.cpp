@@ -1,6 +1,9 @@
 /**
  * @file OrdersHandlerTest.cpp
  * @brief Unit-тесты для OrdersHandler
+ * 
+ * ВАЖНО: POST и DELETE теперь через RabbitMQ, не через HTTP!
+ * OrdersHandler обрабатывает только GET запросы.
  */
 
 #include <gtest/gtest.h>
@@ -47,29 +50,15 @@ public:
     std::map<std::string, std::string> getParams() const override { return params_; }
     std::map<std::string, std::string> getHeaders() const override { return headers_; }
 
-    void setHeader(const std::string& name, const std::string& value) {
-        headers_[name] = value;
-    }
-
 private:
     void parseQueryString(const std::string& query) {
-        size_t start = 0;
-        while (start < query.size()) {
-            auto eq = query.find('=', start);
-            auto amp = query.find('&', start);
-            if (eq == std::string::npos) break;
-
-            std::string key = query.substr(start, eq - start);
-            std::string value = (amp == std::string::npos)
-                ? query.substr(eq + 1)
-                : query.substr(eq + 1, amp - eq - 1);
-
-            if (!key.empty()) {
-                params_[key] = value;
+        std::istringstream iss(query);
+        std::string pair;
+        while (std::getline(iss, pair, '&')) {
+            auto eqPos = pair.find('=');
+            if (eqPos != std::string::npos) {
+                params_[pair.substr(0, eqPos)] = pair.substr(eqPos + 1);
             }
-
-            if (amp == std::string::npos) break;
-            start = amp + 1;
         }
     }
 
@@ -87,25 +76,25 @@ private:
 
 class TestResponse : public IResponse {
 public:
-    void setStatus(int code) override { status_ = code; }
-    void setBody(const std::string& body) override { body_ = body; }
+    void setStatus(int status) override { status_ = status; }
     void setHeader(const std::string& name, const std::string& value) override {
         headers_[name] = value;
     }
+    void setBody(const std::string& body) override { body_ = body; }
 
     int getStatus() const { return status_; }
     std::string getBody() const { return body_; }
     std::map<std::string, std::string> getHeaders() const { return headers_; }
 
 private:
-    int status_ = 0;
+    int status_ = 200;
     std::string body_;
     std::map<std::string, std::string> headers_;
 };
 
 
 // ============================================================================
-// Mock для IBrokerGateway
+// Mock IBrokerGateway
 // ============================================================================
 
 class MockBrokerGateway : public ports::output::IBrokerGateway {
@@ -114,22 +103,23 @@ public:
     MOCK_METHOD(void, unregisterAccount, (const std::string&), (override));
     MOCK_METHOD(std::optional<domain::Quote>, getQuote, (const std::string&), (override));
     MOCK_METHOD(std::vector<domain::Quote>, getQuotes, (const std::vector<std::string>&), (override));
-    MOCK_METHOD(std::vector<domain::Instrument>, searchInstruments, (const std::string&), (override));
     MOCK_METHOD(std::optional<domain::Instrument>, getInstrumentByFigi, (const std::string&), (override));
     MOCK_METHOD(std::vector<domain::Instrument>, getAllInstruments, (), (override));
+    MOCK_METHOD(std::vector<domain::Instrument>, searchInstruments, (const std::string&), (override));
     MOCK_METHOD(domain::Portfolio, getPortfolio, (const std::string&), (override));
     MOCK_METHOD(domain::OrderResult, placeOrder, (const std::string&, const domain::OrderRequest&), (override));
     MOCK_METHOD(bool, cancelOrder, (const std::string&, const std::string&), (override));
-    MOCK_METHOD(std::optional<domain::Order>, getOrderStatus, (const std::string&, const std::string&), (override));
     MOCK_METHOD(std::vector<domain::Order>, getOrders, (const std::string&), (override));
-    MOCK_METHOD((std::vector<domain::Order>), getOrderHistory, 
-                (const std::string&, const std::optional<std::chrono::system_clock::time_point>&,
+    MOCK_METHOD(std::optional<domain::Order>, getOrderStatus, (const std::string&, const std::string&), (override));
+    MOCK_METHOD(std::vector<domain::Order>, getOrderHistory, 
+                (const std::string&, 
+                 const std::optional<std::chrono::system_clock::time_point>&,
                  const std::optional<std::chrono::system_clock::time_point>&), (override));
 };
 
 
 // ============================================================================
-// Тестовый класс
+// Test Fixture
 // ============================================================================
 
 class OrdersHandlerTest : public ::testing::Test {
@@ -149,20 +139,10 @@ protected:
 
 
 // ============================================================================
-// ТЕСТЫ: POST /api/v1/orders
+// ТЕСТЫ: POST /api/v1/orders — теперь возвращает 405!
 // ============================================================================
 
-TEST_F(OrdersHandlerTest, PlaceOrder_SandboxAccount_Returns201) {
-    domain::OrderResult result;
-    result.orderId = "ord-12345";
-    result.status = domain::OrderStatus::FILLED;
-    result.executedLots = 10;
-    result.executedPrice = domain::Money::fromDouble(265.0, "RUB");
-    
-    EXPECT_CALL(*mockBroker_, placeOrder(_, _))
-        .Times(1)
-        .WillOnce(Return(result));
-
+TEST_F(OrdersHandlerTest, PostOrder_Returns405_EventDriven) {
     std::string body = R"({
         "account_id": "acc-001-sandbox",
         "figi": "BBG004730N88",
@@ -176,92 +156,11 @@ TEST_F(OrdersHandlerTest, PlaceOrder_SandboxAccount_Returns201) {
     
     handler_->handle(req, res);
     
-    EXPECT_EQ(res.getStatus(), 201);
+    // POST теперь через RabbitMQ, HTTP возвращает 405
+    EXPECT_EQ(res.getStatus(), 405);
     
     auto json = parseJson(res.getBody());
-    EXPECT_EQ(json["order_id"], "ord-12345");
-    EXPECT_EQ(json["status"], "FILLED");
-}
-
-TEST_F(OrdersHandlerTest, PlaceOrder_LimitOrder_WithPrice) {
-    domain::OrderResult result;
-    result.orderId = "ord-67890";
-    result.status = domain::OrderStatus::PENDING;
-    result.executedLots = 0;
-    
-    EXPECT_CALL(*mockBroker_, placeOrder(_, _))
-        .Times(1)
-        .WillOnce(Return(result));
-
-    std::string body = R"({
-        "account_id": "acc-001-sandbox",
-        "figi": "BBG004730N88",
-        "quantity": 5,
-        "direction": "BUY",
-        "order_type": "LIMIT",
-        "price": {"units": 260, "nano": 0, "currency": "RUB"}
-    })";
-
-    TestRequest req("POST", "/api/v1/orders", body);
-    TestResponse res;
-    
-    handler_->handle(req, res);
-    
-    EXPECT_EQ(res.getStatus(), 201);
-    
-    auto json = parseJson(res.getBody());
-    EXPECT_EQ(json["order_id"], "ord-67890");
-}
-
-TEST_F(OrdersHandlerTest, PlaceOrder_NonSandboxAccount_ReturnsRejected) {
-    domain::OrderResult result;
-    result.orderId = "";
-    result.status = domain::OrderStatus::REJECTED;
-    result.message = "Account not found";
-    
-    EXPECT_CALL(*mockBroker_, placeOrder(_, _))
-        .Times(1)
-        .WillOnce(Return(result));
-
-    std::string body = R"({
-        "account_id": "real-production-account",
-        "figi": "BBG004730N88",
-        "quantity": 10,
-        "direction": "BUY",
-        "order_type": "MARKET"
-    })";
-
-    TestRequest req("POST", "/api/v1/orders", body);
-    TestResponse res;
-    
-    handler_->handle(req, res);
-    
-    EXPECT_EQ(res.getStatus(), 201);
-    
-    auto json = parseJson(res.getBody());
-    EXPECT_EQ(json["status"], "REJECTED");
-}
-
-TEST_F(OrdersHandlerTest, PlaceOrder_MissingFields_Returns400) {
-    std::string body = R"({
-        "account_id": "acc-001-sandbox"
-    })";
-
-    TestRequest req("POST", "/api/v1/orders", body);
-    TestResponse res;
-    
-    handler_->handle(req, res);
-    
-    EXPECT_EQ(res.getStatus(), 400);
-}
-
-TEST_F(OrdersHandlerTest, PlaceOrder_InvalidJson_Returns400) {
-    TestRequest req("POST", "/api/v1/orders", "not valid json");
-    TestResponse res;
-    
-    handler_->handle(req, res);
-    
-    EXPECT_EQ(res.getStatus(), 400);
+    EXPECT_TRUE(json.contains("error"));
 }
 
 
@@ -272,7 +171,7 @@ TEST_F(OrdersHandlerTest, PlaceOrder_InvalidJson_Returns400) {
 TEST_F(OrdersHandlerTest, GetOrders_ReturnsArray) {
     std::vector<domain::Order> orders;
     domain::Order order;
-    order.id = "ord-111";  // domain::Order использует id, не orderId!
+    order.id = "ord-111";
     order.accountId = "acc-001-sandbox";
     order.figi = "BBG004730N88";
     order.direction = domain::OrderDirection::BUY;
@@ -298,12 +197,29 @@ TEST_F(OrdersHandlerTest, GetOrders_ReturnsArray) {
     EXPECT_EQ(json[0]["order_id"], "ord-111");
 }
 
-TEST_F(OrdersHandlerTest, GetOrders_NonSandboxAccount_Returns404) {
-    EXPECT_CALL(*mockBroker_, getOrders("unknown-real-account"))
+TEST_F(OrdersHandlerTest, GetOrders_EmptyList_Returns200) {
+    EXPECT_CALL(*mockBroker_, getOrders("acc-001-sandbox"))
+        .Times(1)
+        .WillOnce(Return(std::vector<domain::Order>{}));
+
+    TestRequest req("GET", "/api/v1/orders?account_id=acc-001-sandbox");
+    TestResponse res;
+    
+    handler_->handle(req, res);
+    
+    EXPECT_EQ(res.getStatus(), 200);
+    
+    auto json = parseJson(res.getBody());
+    EXPECT_TRUE(json.is_array());
+    EXPECT_EQ(json.size(), 0);
+}
+
+TEST_F(OrdersHandlerTest, GetOrders_AccountNotFound_Returns404) {
+    EXPECT_CALL(*mockBroker_, getOrders("unknown-account"))
         .Times(1)
         .WillOnce(Throw(std::runtime_error("Account not found")));
 
-    TestRequest req("GET", "/api/v1/orders?account_id=unknown-real-account");
+    TestRequest req("GET", "/api/v1/orders?account_id=unknown-account");
     TestResponse res;
     
     handler_->handle(req, res);
@@ -327,7 +243,7 @@ TEST_F(OrdersHandlerTest, GetOrders_MissingAccountId_Returns400) {
 
 TEST_F(OrdersHandlerTest, GetOrderById_Found_Returns200) {
     domain::Order order;
-    order.id = "ord-12345";  // domain::Order использует id!
+    order.id = "ord-12345";
     order.accountId = "acc-001-sandbox";
     order.figi = "BBG004730N88";
     order.status = domain::OrderStatus::FILLED;
@@ -345,6 +261,7 @@ TEST_F(OrdersHandlerTest, GetOrderById_Found_Returns200) {
     
     auto json = parseJson(res.getBody());
     EXPECT_EQ(json["order_id"], "ord-12345");
+    EXPECT_EQ(json["status"], "FILLED");
 }
 
 TEST_F(OrdersHandlerTest, GetOrderById_NotFound_Returns404) {
@@ -362,46 +279,38 @@ TEST_F(OrdersHandlerTest, GetOrderById_NotFound_Returns404) {
 
 
 // ============================================================================
-// ТЕСТЫ: DELETE /api/v1/orders/{id}
+// ТЕСТЫ: DELETE /api/v1/orders/{id} — теперь возвращает 405!
 // ============================================================================
 
-TEST_F(OrdersHandlerTest, CancelOrder_Success_Returns200) {
-    EXPECT_CALL(*mockBroker_, cancelOrder("acc-001-sandbox", "ord-12345"))
-        .Times(1)
-        .WillOnce(Return(true));
-
+TEST_F(OrdersHandlerTest, DeleteOrder_Returns405_EventDriven) {
     TestRequest req("DELETE", "/api/v1/orders/ord-12345?account_id=acc-001-sandbox");
     TestResponse res;
     
     handler_->handle(req, res);
     
-    EXPECT_EQ(res.getStatus(), 200);
+    // DELETE теперь через RabbitMQ, HTTP возвращает 405
+    EXPECT_EQ(res.getStatus(), 405);
     
     auto json = parseJson(res.getBody());
-    EXPECT_EQ(json["order_id"], "ord-12345");
-    EXPECT_EQ(json["status"], "CANCELLED");
-}
-
-TEST_F(OrdersHandlerTest, CancelOrder_NotFound_Returns404) {
-    EXPECT_CALL(*mockBroker_, cancelOrder(_, _))
-        .Times(1)
-        .WillOnce(Return(false));
-
-    TestRequest req("DELETE", "/api/v1/orders/non-existent?account_id=acc-001-sandbox");
-    TestResponse res;
-    
-    handler_->handle(req, res);
-    
-    EXPECT_EQ(res.getStatus(), 404);
+    EXPECT_TRUE(json.contains("error"));
 }
 
 
 // ============================================================================
-// ТЕСТЫ: HTTP методы
+// ТЕСТЫ: Другие HTTP методы
 // ============================================================================
 
 TEST_F(OrdersHandlerTest, PutMethod_Returns405) {
     TestRequest req("PUT", "/api/v1/orders/ord-12345");
+    TestResponse res;
+    
+    handler_->handle(req, res);
+    
+    EXPECT_EQ(res.getStatus(), 405);
+}
+
+TEST_F(OrdersHandlerTest, PatchMethod_Returns405) {
+    TestRequest req("PATCH", "/api/v1/orders/ord-12345");
     TestResponse res;
     
     handler_->handle(req, res);
