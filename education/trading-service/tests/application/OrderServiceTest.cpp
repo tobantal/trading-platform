@@ -18,7 +18,16 @@ protected:
     void SetUp() override {
         mockBroker_ = std::make_shared<MockBrokerGateway>();
         mockPublisher_ = std::make_shared<MockEventPublisher>();
-        
+
+        // Настраиваем mock для валидации FIGI (SBER)
+        domain::Instrument sber;
+        sber.figi = "BBG004730N88";
+        sber.ticker = "SBER";
+        sber.name = "Sberbank";
+        sber.lot = 10;
+
+        mockBroker_->setInstrument("BBG004730N88", sber);  // ← Используй существующий метод!
+
         orderService_ = std::make_shared<OrderService>(mockBroker_, mockPublisher_);
     }
 
@@ -156,4 +165,19 @@ TEST_F(OrderServiceTest, GetAllOrders_EmptyAccount_ReturnsEmpty) {
     auto orders = orderService_->getAllOrders("unknown-account");
 
     EXPECT_TRUE(orders.empty());
+}
+
+TEST_F(OrderServiceTest, PlaceOrder_InvalidFigi_ReturnsRejected) {
+    domain::OrderRequest request;
+    request.accountId = "acc-001";
+    request.figi = "INVALID_FIGI";  // Не настроен в mock
+    request.direction = domain::OrderDirection::BUY;
+    request.type = domain::OrderType::MARKET;
+    request.quantity = 10;
+
+    auto result = orderService_->placeOrder(request);
+
+    EXPECT_EQ(result.status, domain::OrderStatus::REJECTED);
+    EXPECT_EQ(result.message, "Invalid FIGI: INVALID_FIGI");
+    EXPECT_EQ(mockPublisher_->publishCallCount(), 0);  // Событие не публикуется
 }

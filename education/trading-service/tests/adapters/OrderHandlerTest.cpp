@@ -22,9 +22,17 @@ using json = nlohmann::json;
 class OrderHandlerTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        mockBroker_ = std::make_shared<MockBrokerGateway>();
+         mockBroker_ = std::make_shared<MockBrokerGateway>();
         mockPublisher_ = std::make_shared<MockEventPublisher>();
         mockAuthClient_ = std::make_shared<MockAuthClient>();
+
+        // Настраиваем инструмент для валидации FIGI
+        domain::Instrument sber;
+        sber.figi = "BBG004730N88";
+        sber.ticker = "SBER";
+        sber.name = "Sberbank";
+        sber.lot = 10;
+        mockBroker_->setInstrument("BBG004730N88", sber);  // ← ДОБАВИТЬ
 
         auto orderService = std::make_shared<OrderService>(mockBroker_, mockPublisher_);
         handler_ = std::make_shared<OrderHandler>(orderService, mockAuthClient_);
@@ -172,7 +180,7 @@ TEST_F(OrderHandlerTest, GetOrders_ValidToken_ReturnsOrders) {
     auto body = json::parse(res.getBody());
     EXPECT_TRUE(body.contains("orders"));
     EXPECT_EQ(body["orders"].size(), 1u);
-    EXPECT_EQ(body["orders"][0]["id"], "ord-001");
+    EXPECT_EQ(body["orders"][0]["order_id"], "ord-001");
 }
 
 TEST_F(OrderHandlerTest, GetOrders_NoOrders_ReturnsEmptyArray) {
