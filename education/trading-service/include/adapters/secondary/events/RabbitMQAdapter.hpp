@@ -55,6 +55,7 @@ public:
         std::cout << "[RabbitMQAdapter] Created for " 
                   << settings_->getHost() << ":" << settings_->getPort()
                   << " exchange=" << exchangeName_ << std::endl;
+                  start();
     }
 
     ~RabbitMQAdapter() override {
