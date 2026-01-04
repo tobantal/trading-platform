@@ -508,7 +508,7 @@ private:
             // Обновляем портфель в БД
             persistBalanceAndPositions(e.accountId);
             
-            // *** ДОБАВЛЕНО: Публикуем portfolio.updated ***
+            // Публикуем portfolio.updated
             publishPortfolioUpdate(e.accountId);
             
             // Обновляем ордер

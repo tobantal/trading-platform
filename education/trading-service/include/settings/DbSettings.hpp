@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include <stdexcept>
 
-namespace broker::settings
+namespace trading::settings
 {
 
     /**
@@ -18,11 +18,11 @@ namespace broker::settings
     public:
         DbSettings()
         {
-            host_ = getEnvOrDefault("BROKER_DB_HOST", "broker-postgres");
-            port_ = std::stoi(getEnvOrDefault("BROKER_DB_PORT", "5432"));
-            name_ = getEnvOrDefault("BROKER_DB_NAME", "broker_db");
-            user_ = getEnvOrDefault("BROKER_DB_USER", "broker_user");
-            password_ = getEnvOrDefault("BROKER_DB_PASSWORD", "broker_secret_password");
+            host_ = getEnvOrDefault("TRADING_DB_HOST", "trading-postgres");
+            port_ = std::stoi(getEnvOrDefault("TRADING_DB_PORT", "5432"));
+            name_ = getEnvOrDefault("TRADING_DB_NAME", "trading_db");
+            user_ = getEnvOrDefault("TRADING_DB_USER", "trading_user");
+            password_ = getEnvOrDefault("TRADING_DB_PASSWORD", "trading_secret_password");
         }
 
         std::string getHost() const { return host_; }
@@ -51,4 +51,4 @@ namespace broker::settings
         }
     };
 
-} // namespace broker::settings
+} // namespace trading::settings

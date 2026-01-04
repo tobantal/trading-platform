@@ -45,10 +45,10 @@ CREATE TABLE IF NOT EXISTS balances (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS idempotency_keys (
-    idempotency_key VARCHAR(64) PRIMARY KEY,
-    order_id VARCHAR(64),
-    response_status INTEGER,
+-- Идемпотентность запросов
+CREATE TABLE idempotency_keys (
+    key VARCHAR(64) PRIMARY KEY,
+    response_status INTEGER NOT NULL,
     response_body TEXT,
     created_at TIMESTAMP DEFAULT NOW()
 );
