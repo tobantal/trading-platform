@@ -66,30 +66,34 @@ protected:
     void configureInjection() override {
         std::cout << "[TradingApp] Configuring DI..." << std::endl;
 
-        // RabbitMQ (один экземпляр для Publisher и Consumer)
-        auto rabbitSettings = std::make_shared<settings::RabbitMQSettings>();
-        rabbitMQAdapter_ = std::make_shared<adapters::secondary::RabbitMQAdapter>(rabbitSettings);
+        // Шаг 1: Создаём RabbitMQAdapter через DI (один экземпляр для Publisher и Consumer)
+        auto rabbitInjector = di::make_injector(
+            di::bind<settings::RabbitMQSettings>().in(di::singleton)
+        );
+        auto rabbitMQAdapter = rabbitInjector.create<std::shared_ptr<adapters::secondary::RabbitMQAdapter>>();
 
+        // Шаг 2: Основной injector с instance binding для RabbitMQ
         auto injector = di::make_injector(
-            di::bind<settings::AuthClientSettings>().to<settings::AuthClientSettings>().in(di::singleton),
+            di::bind<settings::AuthClientSettings>().in(di::singleton),
             di::bind<settings::IBrokerClientSettings>().to<settings::BrokerClientSettings>().in(di::singleton),
-            di::bind<settings::RabbitMQSettings>().to(rabbitSettings),
-            di::bind<settings::CacheSettings>().to<settings::CacheSettings>().in(di::singleton),
+            di::bind<settings::RabbitMQSettings>().in(di::singleton),
+            di::bind<settings::CacheSettings>().in(di::singleton),
             
             di::bind<IHttpClient>().to<HttpClient>().in(di::singleton),
-            di::bind<adapters::secondary::HttpBrokerGateway>().to<adapters::secondary::HttpBrokerGateway>().in(di::singleton),
+            di::bind<adapters::secondary::HttpBrokerGateway>().in(di::singleton),
             di::bind<ports::output::IAuthClient>().to<adapters::secondary::HttpAuthClient>().in(di::singleton),
             di::bind<trading::ports::output::IBrokerGateway>().to<adapters::secondary::CachedBrokerGateway>().in(di::singleton),
             
-            di::bind<ports::output::IEventPublisher>().to(rabbitMQAdapter_),
-            di::bind<ports::output::IEventConsumer>().to(rabbitMQAdapter_),
+            // RabbitMQ - один экземпляр для обоих интерфейсов
+            di::bind<ports::output::IEventPublisher>().to(rabbitMQAdapter),
+            di::bind<ports::output::IEventConsumer>().to(rabbitMQAdapter),
             
             di::bind<ports::input::IMarketService>().to<application::MarketService>().in(di::singleton),
             di::bind<ports::input::IOrderService>().to<application::OrderService>().in(di::singleton),
             di::bind<ports::input::IPortfolioService>().to<application::PortfolioService>().in(di::singleton)
         );
 
-        // HTTP Handlers
+        // Шаг 3: HTTP Handlers
         handlers_[getHandlerKey("GET", "/health")] = injector.create<std::shared_ptr<adapters::primary::HealthHandler>>();
         
         auto marketHandler = injector.create<std::shared_ptr<adapters::primary::MarketHandler>>();
@@ -107,9 +111,9 @@ protected:
         handlers_[getHandlerKey("GET", "/api/v1/portfolio")] = portfolioHandler;
         handlers_[getHandlerKey("GET", "/api/v1/portfolio/*")] = portfolioHandler;
 
-        // Event Handler (слушает broker.events)
-        auto eventConsumer = injector.create<std::shared_ptr<ports::output::IEventConsumer>>();
-        tradingEventHandler_ = std::make_shared<application::TradingEventHandler>(eventConsumer);
+        // Шаг 4: Event Handler через DI (слушает broker.events)
+        // TradingEventHandler вызывает subscribe() в конструкторе
+        tradingEventHandler_ = injector.create<std::shared_ptr<application::TradingEventHandler>>();
         
         tradingEventHandler_->onOrderUpdate([](const application::TradingEventHandler::OrderUpdate& u) {
             std::cout << "[TradingApp] Order " << u.orderId << " -> " << u.status << std::endl;
@@ -119,11 +123,14 @@ protected:
             std::cout << "[TradingApp] Portfolio updated: " << accountId << std::endl;
         });
 
+        // Шаг 5: Запускаем RabbitMQ ПОСЛЕ регистрации всех handlers
+        std::cout << "[TradingApp] Starting RabbitMQ..." << std::endl;
+        rabbitMQAdapter->start();
+
         std::cout << "[TradingApp] Ready (events via RabbitMQ)" << std::endl;
     }
 
 private:
-    std::shared_ptr<adapters::secondary::RabbitMQAdapter> rabbitMQAdapter_;
     std::shared_ptr<application::TradingEventHandler> tradingEventHandler_;
 };
 

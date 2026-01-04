@@ -1,6 +1,6 @@
-# ROOT CMakeLists.txt - Trading Platform Microservices
+# education/CMakeLists.txt - Trading Platform Microservices
 cmake_minimum_required(VERSION 3.16)
-project(trading-platform VERSION 1.0.0 LANGUAGES CXX)
+project(trading-platform-education VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -71,7 +71,8 @@ set(AMQP-CPP_LINUX_TCP ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(amqpcpp)
 
 # ============================================
-# GOOGLE TEST (for testing)
+# GOOGLE TEST (единственное место загрузки!)
+# Сервисы используют GTest::gtest_main без повторной загрузки
 # ============================================
 if(BUILD_TESTS)
     message(STATUS "Fetching GoogleTest...")
@@ -82,7 +83,7 @@ if(BUILD_TESTS)
     )
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
-    enable_testing()
+    # НЕ вызываем enable_testing() - уже вызван в ROOT CMakeLists.txt
 endif()
 
 # ============================================

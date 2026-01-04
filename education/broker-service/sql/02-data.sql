@@ -1,7 +1,7 @@
 -- broker-service/sql/02-data.sql
--- Тестовые данные
+-- Seed данные для broker-service
 
--- Инструменты
+-- Инструменты (MOEX Blue Chips)
 INSERT INTO instruments (figi, ticker, name, currency, lot_size, min_price_increment) VALUES
 ('BBG004730N88', 'SBER', 'Сбербанк', 'RUB', 10, 100),
 ('BBG004730RP0', 'GAZP', 'Газпром', 'RUB', 10, 100),
@@ -10,7 +10,7 @@ INSERT INTO instruments (figi, ticker, name, currency, lot_size, min_price_incre
 ('BBG004S68614', 'ALRS', 'Алроса', 'RUB', 10, 10)
 ON CONFLICT (figi) DO NOTHING;
 
--- Котировки (цены в копейках: 26500 = 265.00 руб)
+-- Котировки (цены в копейках: 26500 = 265.00 RUB)
 INSERT INTO quotes (figi, bid, ask, last_price, volume) VALUES
 ('BBG004730N88', 26500, 26550, 26525, 1000000),
 ('BBG004730RP0', 15800, 15850, 15820, 500000),
@@ -24,13 +24,22 @@ ON CONFLICT (figi) DO UPDATE SET
     volume = EXCLUDED.volume,
     updated_at = NOW();
 
--- Балансы (суммы в копейках: 100000000 = 1_000_000 руб)
+-- Балансы (суммы в копейках: 10000000 = 100,000 RUB)
+-- ВАЖНО: account_id содержит "sandbox" для совместимости с auto-create
 INSERT INTO broker_balances (account_id, currency, available, reserved) VALUES
-('acc-001-sandbox', 'RUB', 100000000, 0),
-('acc-001-prod', 'RUB', 50000000, 0),
-('acc-002-sandbox', 'RUB', 10000000, 0),
-('acc-004-sandbox', 'RUB', 1000000000, 0)
+('acc-sandbox-001', 'RUB', 10000000, 0),
+('acc-sandbox-002', 'RUB', 50000000, 0)
 ON CONFLICT (account_id) DO UPDATE SET
     available = EXCLUDED.available,
     reserved = EXCLUDED.reserved,
     updated_at = NOW();
+
+-- Позиции для тестового аккаунта
+INSERT INTO broker_positions (account_id, figi, ticker, quantity, avg_price, updated_at) VALUES
+('acc-sandbox-001', 'BBG004730N88', 'SBER', 100, 26000, NOW()),
+('acc-sandbox-001', 'BBG004730RP0', 'GAZP', 50, 15500, NOW())
+ON CONFLICT (account_id, figi) DO UPDATE SET
+    quantity = EXCLUDED.quantity,
+    avg_price = EXCLUDED.avg_price,
+    updated_at = NOW();
+

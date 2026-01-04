@@ -12,7 +12,7 @@
     },
     {
       "key": "sandbox_account",
-      "value": "acc-001-sandbox",
+      "value": "acc-sandbox-001",
       "type": "string"
     }
   ],
@@ -310,13 +310,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 405 - Method Not Allowed', function () {",
-                  "    pm.response.to.have.status(405);",
+                  "pm.test('Status code is 404 or 405 (endpoint removed)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([404, 405]);",
                   "});",
                   "",
-                  "pm.test('Error message explains event-driven', function () {",
+                  "pm.test('Error response returned', function () {",
                   "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.error).to.include('event-driven');",
+                  "    pm.expect(jsonData.error).to.be.a('string');",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -328,7 +328,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"account_id\": \"acc-001-sandbox\",\n  \"figi\": \"BBG004730N88\",\n  \"quantity\": 10,\n  \"direction\": \"BUY\",\n  \"order_type\": \"MARKET\"\n}"
+              "raw": "{\n  \"account_id\": \"acc-sandbox-001\",\n  \"figi\": \"BBG004730N88\",\n  \"quantity\": 10,\n  \"direction\": \"BUY\",\n  \"order_type\": \"MARKET\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/orders",
@@ -344,13 +344,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 405 - Method Not Allowed', function () {",
-                  "    pm.response.to.have.status(405);",
+                  "pm.test('Status code is 404 or 405 (endpoint removed)', function () {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([404, 405]);",
                   "});",
                   "",
-                  "pm.test('Error message explains event-driven', function () {",
+                  "pm.test('Error response returned', function () {",
                   "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.error).to.include('event-driven');",
+                  "    pm.expect(jsonData.error).to.be.a('string');",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -435,3 +435,4 @@
     }
   ]
 }
+

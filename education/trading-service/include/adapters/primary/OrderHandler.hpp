@@ -173,8 +173,8 @@ private:
     {
         std::string orderId = path.substr(std::string("/api/v1/orders/").length());
         
-        auto order = orderService_->getOrderById(orderId);
-        if (!order || order->accountId != accountId) {
+        auto order = orderService_->getOrderById(accountId, orderId);
+        if (!order) {
             res.setStatus(404);
             res.setHeader("Content-Type", "application/json");
             res.setBody(R"({"error": "Order not found"})");
@@ -215,7 +215,7 @@ private:
     nlohmann::json orderToJson(const domain::Order& order)
     {
         nlohmann::json j;
-        j["id"] = order.id;
+        j["order_id"] = order.id;
         j["account_id"] = order.accountId;
         j["figi"] = order.figi;
         j["direction"] = domain::toString(order.direction);

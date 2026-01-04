@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 project(trading-service VERSION 1.0.0 LANGUAGES CXX)
 
-
 message(STATUS "")
 message(STATUS "========================================")
 message(STATUS "  Trading Service ${PROJECT_VERSION}")
@@ -11,7 +10,6 @@ message(STATUS "C++ Standard: C++${CMAKE_CXX_STANDARD}")
 message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "========================================")
 message(STATUS "")
-
 
 # ============================================================================
 # Executable
@@ -41,18 +39,13 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 
 # ============================================================================
 # Tests (optional)
+# GoogleTest уже загружен в родительском education/CMakeLists.txt
+# НЕ дублируем FetchContent и enable_testing() здесь!
 # ============================================================================
-option(BUILD_TESTS "Build tests" ON)
 
 if(BUILD_TESTS)
-    enable_testing()
-    
-    FetchContent_Declare(
-        googletest
-        GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG v1.14.0
-    )
-    FetchContent_MakeAvailable(googletest)
+    # НЕ вызываем enable_testing() - уже вызван в root
+    # НЕ загружаем GoogleTest - уже загружен в education/CMakeLists.txt
     
     set(TRADING_TEST_SOURCES
         tests/adapters/CachedBrokerGatewayTest.cpp
@@ -87,8 +80,3 @@ if(BUILD_TESTS)
     include(GoogleTest)
     gtest_discover_tests(trading-service-tests)
 endif()
-
-# ============================================================================
-# Install
-# ============================================================================
-install(TARGETS ${PROJECT_NAME} DESTINATION bin)

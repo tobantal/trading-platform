@@ -1,3 +1,4 @@
+// trading-service/include/adapters/secondary/HttpBrokerGateway.hpp
 #pragma once
 
 #include "ports/output/IBrokerGateway.hpp"
@@ -63,7 +64,6 @@ public:
 
             auto json = nlohmann::json::parse(response.getBody());
             
-            // Broker может вернуть массив напрямую или объект с полем "quotes"
             nlohmann::json quotesJson;
             if (json.is_array()) {
                 quotesJson = json;
@@ -86,10 +86,6 @@ public:
     // ============================================
 
     std::vector<domain::Instrument> searchInstruments(const std::string& query) override {
-        // TODO: broker-service не поддерживает search endpoint.
-        // Получаем все инструменты и фильтруем локально.
-        // Рефакторинг: рассмотреть добавление search в broker-service.
-        
         auto allInstruments = getAllInstruments();
         
         if (query.empty()) {
@@ -139,7 +135,6 @@ public:
 
             auto json = nlohmann::json::parse(response.getBody());
             
-            // Broker может вернуть массив напрямую или объект с полем "instruments"
             nlohmann::json instrumentsJson;
             if (json.is_array()) {
                 instrumentsJson = json;
@@ -195,7 +190,6 @@ public:
 
             auto json = nlohmann::json::parse(response.getBody());
             
-            // Broker может вернуть массив напрямую или объект с полем "orders"
             nlohmann::json ordersJson;
             if (json.is_array()) {
                 ordersJson = json;
@@ -259,6 +253,39 @@ private:
         return response;
     }
 
+    /**
+     * @brief Парсинг Money из разных форматов broker'а
+     * 
+     * Broker может вернуть:
+     * - {"units": 15958, "nano": 0, "currency": "RUB"}  (Tinkoff-style)
+     * - {"amount": 159.58, "currency": "RUB"}          (простой формат)
+     * - 159.58                                          (просто число)
+     */
+    domain::Money parseMoney(const nlohmann::json& j, const std::string& defaultCurrency = "RUB") {
+        if (j.is_number()) {
+            return domain::Money::fromDouble(j.get<double>(), defaultCurrency);
+        }
+        
+        if (j.is_object()) {
+            std::string currency = j.value("currency", defaultCurrency);
+            
+            // Tinkoff-style: units + nano
+            if (j.contains("units")) {
+                int64_t units = j.value("units", 0);
+                int32_t nano = j.value("nano", 0);
+                double amount = static_cast<double>(units) + static_cast<double>(nano) / 1e9;
+                return domain::Money::fromDouble(amount, currency);
+            }
+            
+            // Простой формат: amount
+            if (j.contains("amount")) {
+                return domain::Money::fromDouble(j.value("amount", 0.0), currency);
+            }
+        }
+        
+        return domain::Money::fromDouble(0.0, defaultCurrency);
+    }
+
     domain::Quote parseQuote(const nlohmann::json& j) {
         std::string currency = j.value("currency", "RUB");
         return domain::Quote(
@@ -283,37 +310,30 @@ private:
     domain::Portfolio parsePortfolio(const nlohmann::json& j) {
         domain::Portfolio portfolio;
         
-        auto cashJson = j.value("cash", nlohmann::json::object());
-        portfolio.cash = domain::Money::fromDouble(
-            cashJson.value("amount", 0.0),
-            cashJson.value("currency", "RUB")
-        );
+        // Cash - может быть в разных форматах
+        if (j.contains("cash")) {
+            portfolio.cash = parseMoney(j["cash"]);
+        }
         
-        auto totalJson = j.value("total_value", nlohmann::json::object());
-        portfolio.totalValue = domain::Money::fromDouble(
-            totalJson.value("amount", 0.0),
-            totalJson.value("currency", "RUB")
-        );
+        // Total value
+        if (j.contains("total_value")) {
+            portfolio.totalValue = parseMoney(j["total_value"]);
+        }
         
+        // Positions
         auto positions = j.value("positions", nlohmann::json::array());
         for (const auto& p : positions) {
             domain::Position pos;
             pos.figi = p.value("figi", "");
             pos.ticker = p.value("ticker", "");
             pos.quantity = p.value("quantity", 0);
-            pos.averagePrice = domain::Money::fromDouble(
-                p.value("average_price", 0.0),
-                p.value("currency", "RUB")
-            );
-            pos.currentPrice = domain::Money::fromDouble(
-                p.value("current_price", 0.0),
-                p.value("currency", "RUB")
-            );
-            pos.pnl = domain::Money::fromDouble(
-                p.value("pnl", 0.0),
-                p.value("currency", "RUB")
-            );
+            
+            std::string currency = p.value("currency", "RUB");
+            pos.averagePrice = domain::Money::fromDouble(p.value("average_price", 0.0), currency);
+            pos.currentPrice = domain::Money::fromDouble(p.value("current_price", 0.0), currency);
+            pos.pnl = domain::Money::fromDouble(p.value("pnl", 0.0), currency);
             pos.pnlPercent = p.value("pnl_percent", 0.0);
+            
             portfolio.positions.push_back(pos);
         }
         
@@ -321,18 +341,28 @@ private:
     }
 
     domain::Order parseOrder(const nlohmann::json& j) {
+        // order_id (broker) или id (legacy)
+        std::string orderId = j.value("order_id", j.value("id", ""));
+        
+        // order_type (broker) или type (legacy)
+        std::string orderType = j.value("order_type", j.value("type", "MARKET"));
+        
+        // price - может быть объектом или числом
+        domain::Money price;
+        if (j.contains("price")) {
+            price = parseMoney(j["price"]);
+        }
+        
         domain::Order order(
-            j.value("id", ""),
+            orderId,
             j.value("account_id", ""),
             j.value("figi", ""),
             domain::parseDirection(j.value("direction", "BUY")),
-            domain::parseOrderType(j.value("type", "MARKET")),
+            domain::parseOrderType(orderType),
             j.value("quantity", 0),
-            domain::Money::fromDouble(
-                j.value("price", 0.0),
-                j.value("currency", "RUB")
-            )
+            price
         );
+        
         order.updateStatus(domain::parseOrderStatus(j.value("status", "PENDING")));
         return order;
     }

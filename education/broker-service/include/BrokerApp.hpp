@@ -71,17 +71,21 @@ protected:
     void configureInjection() override {
         std::cout << "[BrokerApp] Configuring DI..." << std::endl;
 
-        // RabbitMQ (один экземпляр для Publisher и Consumer)
-        auto rabbitSettings = std::make_shared<settings::RabbitMQSettings>();
-        rabbitMQAdapter_ = std::make_shared<adapters::secondary::RabbitMQAdapter>(rabbitSettings);
+        // Шаг 1: Создаём RabbitMQAdapter через DI (один экземпляр для Publisher и Consumer)
+        auto rabbitInjector = di::make_injector(
+            di::bind<settings::RabbitMQSettings>().in(di::singleton)
+        );
+        auto rabbitMQAdapter = rabbitInjector.create<std::shared_ptr<adapters::secondary::RabbitMQAdapter>>();
 
+        // Шаг 2: Основной injector с instance binding для RabbitMQ
         auto injector = di::make_injector(
-            di::bind<settings::DbSettings>().to<settings::DbSettings>().in(di::singleton),
-            di::bind<settings::RabbitMQSettings>().to(rabbitSettings),
-            di::bind<settings::BrokerSettings>().to<settings::BrokerSettings>().in(di::singleton),
+            di::bind<settings::DbSettings>().in(di::singleton),
+            di::bind<settings::RabbitMQSettings>().in(di::singleton),
+            di::bind<settings::BrokerSettings>().in(di::singleton),
             
-            di::bind<ports::output::IEventPublisher>().to(rabbitMQAdapter_),
-            di::bind<ports::output::IEventConsumer>().to(rabbitMQAdapter_),
+            // RabbitMQ - один экземпляр для обоих интерфейсов
+            di::bind<ports::output::IEventPublisher>().to(rabbitMQAdapter),
+            di::bind<ports::output::IEventConsumer>().to(rabbitMQAdapter),
             
             di::bind<ports::output::IInstrumentRepository>().to<adapters::secondary::PostgresInstrumentRepository>().in(di::singleton),
             di::bind<ports::output::IQuoteRepository>().to<adapters::secondary::PostgresQuoteRepository>().in(di::singleton),
@@ -89,18 +93,19 @@ protected:
             di::bind<ports::output::IBrokerPositionRepository>().to<adapters::secondary::PostgresBrokerPositionRepository>().in(di::singleton),
             di::bind<ports::output::IBrokerBalanceRepository>().to<adapters::secondary::PostgresBrokerBalanceRepository>().in(di::singleton),
             
-            di::bind<adapters::secondary::EnhancedFakeBroker>().to<adapters::secondary::EnhancedFakeBroker>().in(di::singleton),
+            di::bind<adapters::secondary::EnhancedFakeBroker>().in(di::singleton),
             di::bind<ports::output::IBrokerGateway>().to<adapters::secondary::FakeBrokerAdapter>().in(di::singleton),
             di::bind<ports::input::IQuoteService>().to<application::QuoteService>().in(di::singleton)
         );
 
-        // Event Handlers
-        auto eventConsumer = injector.create<std::shared_ptr<ports::output::IEventConsumer>>();
-        auto eventPublisher = injector.create<std::shared_ptr<ports::output::IEventPublisher>>();
-        auto brokerGateway = injector.create<std::shared_ptr<ports::output::IBrokerGateway>>();
+        // Шаг 3: Event Handlers через DI
+        // OrderCommandHandler вызывает subscribe() в конструкторе
+        orderCommandHandler_ = injector.create<std::shared_ptr<application::OrderCommandHandler>>();
+        marketDataPublisher_ = injector.create<std::shared_ptr<application::MarketDataPublisher>>();
 
-        orderCommandHandler_ = std::make_shared<application::OrderCommandHandler>(eventConsumer, eventPublisher, brokerGateway);
-        marketDataPublisher_ = std::make_shared<application::MarketDataPublisher>(eventPublisher);
+        // Шаг 4: Запускаем RabbitMQ ПОСЛЕ регистрации всех handlers
+        std::cout << "[BrokerApp] Starting RabbitMQ consumer..." << std::endl;
+        rabbitMQAdapter->start();
 
         // HTTP Handlers (только GET!)
         handlers_[getHandlerKey("GET", "/health")] = injector.create<std::shared_ptr<adapters::primary::HealthHandler>>();
@@ -119,13 +124,11 @@ protected:
         auto ordersHandler = injector.create<std::shared_ptr<adapters::primary::OrdersHandler>>();
         handlers_[getHandlerKey("GET", "/api/v1/orders")] = ordersHandler;
         handlers_[getHandlerKey("GET", "/api/v1/orders/*")] = ordersHandler;
-        // POST и DELETE убраны - теперь через RabbitMQ!
 
         std::cout << "[BrokerApp] Ready (POST/DELETE via RabbitMQ)" << std::endl;
     }
 
 private:
-    std::shared_ptr<adapters::secondary::RabbitMQAdapter> rabbitMQAdapter_;
     std::shared_ptr<application::OrderCommandHandler> orderCommandHandler_;
     std::shared_ptr<application::MarketDataPublisher> marketDataPublisher_;
 };

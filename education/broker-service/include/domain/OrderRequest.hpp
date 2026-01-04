@@ -1,3 +1,4 @@
+// broker-service/include/domain/OrderRequest.hpp
 #pragma once
 
 #include "enums/OrderDirection.hpp"
@@ -11,6 +12,7 @@ namespace broker::domain {
  * @brief Запрос на создание ордера
  */
 struct OrderRequest {
+    std::string orderId;        ///< ID ордера (опционально, если пустой - сгенерируется)
     std::string accountId;      ///< ID счёта
     std::string figi;           ///< FIGI инструмента
     OrderDirection direction;   ///< BUY / SELL

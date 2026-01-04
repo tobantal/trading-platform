@@ -1,23 +1,24 @@
+// trading-service/include/ports/input/IOrderService.hpp
 #pragma once
 
 #include "domain/OrderRequest.hpp"
 #include "domain/OrderResult.hpp"
 #include "domain/Order.hpp"
 #include <vector>
-#include <string>
 #include <optional>
+#include <string>
 
 namespace trading::ports::input {
 
 /**
- * @brief Интерфейс сервиса управления ордерами
+ * @brief Интерфейс сервиса ордеров
  */
 class IOrderService {
 public:
     virtual ~IOrderService() = default;
 
     /**
-     * @brief Создать ордер
+     * @brief Разместить ордер
      */
     virtual domain::OrderResult placeOrder(const domain::OrderRequest& request) = 0;
 
@@ -28,8 +29,12 @@ public:
 
     /**
      * @brief Получить ордер по ID
+     * @param accountId ID аккаунта (нужен для запроса к broker)
+     * @param orderId ID ордера
      */
-    virtual std::optional<domain::Order> getOrderById(const std::string& orderId) = 0;
+    virtual std::optional<domain::Order> getOrderById(
+        const std::string& accountId, 
+        const std::string& orderId) = 0;
 
     /**
      * @brief Получить все ордера аккаунта

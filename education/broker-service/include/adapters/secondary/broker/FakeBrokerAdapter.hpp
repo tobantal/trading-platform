@@ -295,24 +295,23 @@ public:
         auto brokerResult = broker_->placeOrder(accountId, brokerReq);
         auto result = convertOrderResult(brokerResult);
         
-        if (result.status != domain::OrderStatus::REJECTED) {
+        // orderId передан от trading-service (валидация в OrderCommandHandler)
+        result.orderId = request.orderId;
+
+        // Логируем результат
+        if (result.status == domain::OrderStatus::REJECTED) {
+            std::cout << "[FakeBrokerAdapter] REJECTED order=" << result.orderId 
+                      << " reason=" << result.message << std::endl;
+        } else {
+            std::cout << "[FakeBrokerAdapter] Order " << result.orderId 
+                      << " status=" << static_cast<int>(result.status) << std::endl;
+
             persistOrder(result.orderId, accountId, request, result);
             
             if (result.status == domain::OrderStatus::FILLED) {
                 persistBalanceAndPositions(accountId);
                 // Публикуем portfolio.updated после исполнения
                 publishPortfolioUpdate(accountId);
-            }
-            
-            if (eventPublisher_) {
-                domain::OrderCreatedEvent event;
-                event.orderId = result.orderId;
-                event.accountId = accountId;
-                event.figi = request.figi;
-                event.direction = request.direction;
-                event.quantity = request.quantity;
-                event.price = request.price;
-                eventPublisher_->publish(event.eventType, event.toJson());
             }
         }
         
@@ -334,13 +333,6 @@ public:
                     orderCache_->put(orderId, *order);
                 } catch (...) {}
             }
-        }
-        
-        if (cancelled && eventPublisher_) {
-            domain::OrderCancelledEvent event;
-            event.orderId = orderId;
-            event.accountId = accountId;
-            eventPublisher_->publish(event.eventType, event.toJson());
         }
         
         return cancelled;

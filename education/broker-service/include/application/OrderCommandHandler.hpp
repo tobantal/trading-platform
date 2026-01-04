@@ -1,4 +1,4 @@
-// include/application/OrderCommandHandler.hpp
+// broker-service/include/application/OrderCommandHandler.hpp
 #pragma once
 
 #include "ports/output/IEventConsumer.hpp"
@@ -82,6 +82,28 @@ private:
         double price = json.value("price", 0.0);
         std::string currency = json.value("currency", "RUB");
         
+        // Валидация обязательных полей
+        if (orderId.empty()) {
+            std::cerr << "[OrderCommandHandler] Rejected: missing order_id" << std::endl;
+            publishOrderRejected("unknown", accountId, figi, "Missing required field: order_id");
+            return;
+        }
+        if (accountId.empty()) {
+            std::cerr << "[OrderCommandHandler] Rejected: missing account_id" << std::endl;
+            publishOrderRejected(orderId, "", figi, "Missing required field: account_id");
+            return;
+        }
+        if (figi.empty()) {
+            std::cerr << "[OrderCommandHandler] Rejected: missing figi" << std::endl;
+            publishOrderRejected(orderId, accountId, "", "Missing required field: figi");
+            return;
+        }
+        if (quantity <= 0) {
+            std::cerr << "[OrderCommandHandler] Rejected: invalid quantity" << std::endl;
+            publishOrderRejected(orderId, accountId, figi, "Invalid quantity: must be > 0");
+            return;
+        }
+        
         std::cout << "[OrderCommandHandler] Creating order " << orderId << std::endl;
         
         domain::OrderDirection direction = (directionStr == "SELL") 
@@ -92,7 +114,9 @@ private:
             ? domain::OrderType::LIMIT 
             : domain::OrderType::MARKET;
         
+        // Создаём request с orderId от trading-service
         domain::OrderRequest request;
+        request.orderId = orderId;  // ВАЖНО: передаём orderId!
         request.figi = figi;
         request.quantity = quantity;
         request.direction = direction;
@@ -102,9 +126,8 @@ private:
         // Публикуем order.created
         publishOrderCreated(orderId, accountId, figi);
         
-        // Исполняем
+        // Исполняем (FakeBrokerAdapter использует request.orderId)
         auto result = brokerGateway_->placeOrder(accountId, request);
-        result.orderId = orderId;
         
         // Публикуем результат
         if (result.status == domain::OrderStatus::FILLED) {
@@ -138,6 +161,12 @@ private:
     }
 
     void publishOrderFilled(const domain::OrderResult& result, const std::string& accountId, const std::string& figi) {
+        std::cout << "[OrderCommandHandler] FILLED order=" << result.orderId 
+                  << " account=" << accountId 
+                  << " figi=" << figi 
+                  << " lots=" << result.executedLots 
+                  << " price=" << result.executedPrice.toDouble() << std::endl;
+        
         nlohmann::json event;
         event["order_id"] = result.orderId;
         event["account_id"] = accountId;
@@ -163,6 +192,11 @@ private:
     }
 
     void publishOrderRejected(const std::string& orderId, const std::string& accountId, const std::string& figi, const std::string& reason) {
+        std::cout << "[OrderCommandHandler] REJECTED order=" << orderId 
+                  << " account=" << accountId 
+                  << " figi=" << figi 
+                  << " reason=" << reason << std::endl;
+        
         nlohmann::json event;
         event["order_id"] = orderId;
         event["account_id"] = accountId;

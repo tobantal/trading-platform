@@ -1,0 +1,799 @@
+{
+  "info": {
+    "name": "Trading Service E2E Tests",
+    "description": "End-to-End тесты для Trading Service с Event-Driven архитектурой.\n\nПоток:\n1. Auth: Login → Get Accounts → Get Access Token\n2. Portfolio: Проверка начального баланса\n3. Orders: POST → PENDING → (RabbitMQ) → GET → FILLED\n4. Portfolio: Проверка изменений после сделки",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "tradingBaseUrl", "value": "http://arch.homework/trading", "type": "string"},
+    {"key": "authBaseUrl", "value": "http://arch.homework/auth", "type": "string"},
+    {"key": "sessionToken", "value": "", "type": "string"},
+    {"key": "accessToken", "value": "", "type": "string"},
+    {"key": "accountId", "value": "", "type": "string"},
+    {"key": "orderId", "value": "", "type": "string"},
+    {"key": "limitOrderId", "value": "", "type": "string"},
+    {"key": "initialCash", "value": "0", "type": "string"},
+    {"key": "testFigi", "value": "BBG004730N88", "type": "string"},
+    {"key": "asyncDelayMs", "value": "1500", "type": "string"}
+  ],
+  "item": [
+    {
+      "name": "0. Setup - Authentication",
+      "item": [
+        {
+          "name": "Register User (if needed)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// 201 = новый пользователь, 409 = уже существует - оба OK",
+                  "pm.test('Register: 201 or 409', function() {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 409]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"e2e-test-user\", \"password\": \"test123456\", \"email\": \"e2e@test.com\"}"
+            },
+            "url": {
+              "raw": "{{authBaseUrl}}/api/v1/auth/register",
+              "host": ["{{authBaseUrl}}"],
+              "path": ["api", "v1", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Session token saved', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.session_token).to.not.be.empty;",
+                  "    pm.collectionVariables.set('sessionToken', json.session_token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"e2e-test-user\", \"password\": \"test123456\"}"
+            },
+            "url": {
+              "raw": "{{authBaseUrl}}/api/v1/auth/login",
+              "host": ["{{authBaseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Create Sandbox Account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// 201 = создан новый, 400/409 = уже существует - оба OK",
+                  "pm.test('Account created or exists', function() {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 400, 409]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('accountId', json.account_id);",
+                  "    console.log('Created sandbox account:', json.account_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{sessionToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"E2E Test Sandbox\", \"type\": \"SANDBOX\"}"
+            },
+            "url": {
+              "raw": "{{authBaseUrl}}/api/v1/accounts",
+              "host": ["{{authBaseUrl}}"],
+              "path": ["api", "v1", "accounts"]
+            }
+          }
+        },
+        {
+          "name": "Get Accounts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Has accounts', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.accounts).to.be.an('array');",
+                  "    pm.expect(json.accounts.length).to.be.at.least(1);",
+                  "    ",
+                  "    // Ищем аккаунт с 'sandbox' в ID (важно для auto-create в broker)",
+                  "    var sandboxAccount = json.accounts.find(a => a.account_id && a.account_id.includes('sandbox'));",
+                  "    if (sandboxAccount) {",
+                  "        pm.collectionVariables.set('accountId', sandboxAccount.account_id);",
+                  "        console.log('Found sandbox account:', sandboxAccount.account_id);",
+                  "    } else {",
+                  "        // Fallback: первый SANDBOX по типу",
+                  "        var typeAccount = json.accounts.find(a => a.type === 'SANDBOX');",
+                  "        if (typeAccount) {",
+                  "            pm.collectionVariables.set('accountId', typeAccount.account_id);",
+                  "            console.log('WARNING: Using SANDBOX by type (no sandbox in ID):', typeAccount.account_id);",
+                  "        } else {",
+                  "            pm.collectionVariables.set('accountId', json.accounts[0].account_id);",
+                  "            console.log('WARNING: Using first account:', json.accounts[0].account_id);",
+                  "        }",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{sessionToken}}"}],
+            "url": {
+              "raw": "{{authBaseUrl}}/api/v1/accounts",
+              "host": ["{{authBaseUrl}}"],
+              "path": ["api", "v1", "accounts"]
+            }
+          }
+        },
+        {
+          "name": "Get Access Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Access token saved', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.access_token).to.not.be.empty;",
+                  "    pm.collectionVariables.set('accessToken', json.access_token);",
+                  "    console.log('Access token obtained for account:', pm.collectionVariables.get('accountId'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{sessionToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"account_id\": \"{{accountId}}\"}"
+            },
+            "url": {
+              "raw": "{{authBaseUrl}}/api/v1/auth/access-token",
+              "host": ["{{authBaseUrl}}"],
+              "path": ["api", "v1", "auth", "access-token"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Initial State - Portfolio",
+      "item": [
+        {
+          "name": "Get Initial Portfolio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Portfolio has cash', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('cash');",
+                  "    pm.expect(json.cash).to.have.property('amount');",
+                  "    ",
+                  "    // Сохраняем начальный баланс для проверки после сделки",
+                  "    pm.collectionVariables.set('initialCash', json.cash.amount.toString());",
+                  "    console.log('Initial cash:', json.cash.amount);",
+                  "});",
+                  "",
+                  "pm.test('Portfolio has positions array', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('positions');",
+                  "    pm.expect(json.positions).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{accessToken}}"}],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/portfolio",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "portfolio"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. E2E - Market Order Flow",
+      "description": "Асинхронный поток: POST → PENDING → (RabbitMQ обработка) → GET → FILLED",
+      "item": [
+        {
+          "name": "Step 1: Create Market BUY Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 or 202', function() {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 202]);",
+                  "});",
+                  "",
+                  "pm.test('Returns order_id', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('order_id');",
+                  "    pm.collectionVariables.set('orderId', json.order_id);",
+                  "    console.log('Created order:', json.order_id);",
+                  "});",
+                  "",
+                  "pm.test('Initial status is PENDING', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('PENDING');",
+                  "    console.log('Order status:', json.status, '- waiting for RabbitMQ processing...');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"figi\": \"{{testFigi}}\",\n    \"quantity\": 10,\n    \"direction\": \"BUY\",\n    \"type\": \"MARKET\"\n}"
+            },
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Step 2: Wait for Event Processing",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Ждём обработки события через RabbitMQ",
+                  "var delayMs = parseInt(pm.collectionVariables.get('asyncDelayMs')) || 1500;",
+                  "console.log('Waiting', delayMs, 'ms for RabbitMQ event processing...');",
+                  "",
+                  "setTimeout(function() {}, delayMs);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Это dummy запрос для создания задержки",
+                  "// Health check всегда должен проходить",
+                  "pm.test('Health OK (delay checkpoint)', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/health",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Step 3: Verify Order FILLED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Order is FILLED (async via RabbitMQ)', function() {",
+                  "    var json = pm.response.json();",
+                  "    ",
+                  "    // После обработки через RabbitMQ статус должен быть FILLED",
+                  "    pm.expect(json.status).to.be.oneOf(['FILLED', 'PARTIALLY_FILLED']);",
+                  "    console.log('Order final status:', json.status);",
+                  "});",
+                  "",
+                  "pm.test('Order has correct details', function() {",
+                  "    var json = pm.response.json();",
+                  "    var orderId = pm.collectionVariables.get('orderId');",
+                  "    ",
+                  "    pm.expect(json.order_id).to.eql(orderId);",
+                  "    pm.expect(json.direction).to.eql('BUY');",
+                  "    pm.expect(json.figi).to.eql(pm.collectionVariables.get('testFigi'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{accessToken}}"}],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders/{{orderId}}",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders", "{{orderId}}"]
+            }
+          }
+        },
+        {
+          "name": "Step 4: Verify Portfolio Updated",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Cash decreased after BUY', function() {",
+                  "    var json = pm.response.json();",
+                  "    var initialCash = parseFloat(pm.collectionVariables.get('initialCash'));",
+                  "    var currentCash = json.cash.amount;",
+                  "    ",
+                  "    console.log('Initial cash:', initialCash, '-> Current cash:', currentCash);",
+                  "    pm.expect(currentCash).to.be.below(initialCash);",
+                  "});",
+                  "",
+                  "pm.test('Position appeared for SBER', function() {",
+                  "    var json = pm.response.json();",
+                  "    var testFigi = pm.collectionVariables.get('testFigi');",
+                  "    ",
+                  "    var position = json.positions.find(p => p.figi === testFigi);",
+                  "    pm.expect(position).to.not.be.undefined;",
+                  "    pm.expect(position.quantity).to.be.at.least(10);",
+                  "    console.log('Position:', position.ticker, 'qty:', position.quantity);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{accessToken}}"}],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/portfolio",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "portfolio"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. E2E - Limit Order Flow",
+      "description": "LIMIT ордер: сначала PENDING, затем FILLED когда цена достигнута",
+      "item": [
+        {
+          "name": "Create Limit SELL Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 or 202', function() {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([201, 202]);",
+                  "});",
+                  "",
+                  "pm.test('Returns order_id', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('order_id');",
+                  "    pm.collectionVariables.set('limitOrderId', json.order_id);",
+                  "});",
+                  "",
+                  "pm.test('Status is PENDING', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('PENDING');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"figi\": \"{{testFigi}}\",\n    \"quantity\": 5,\n    \"direction\": \"SELL\",\n    \"type\": \"LIMIT\",\n    \"price\": 300.0,\n    \"currency\": \"RUB\"\n}"
+            },
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Wait for Processing",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "var delayMs = parseInt(pm.collectionVariables.get('asyncDelayMs')) || 1500;",
+                  "setTimeout(function() {}, delayMs);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Health OK', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/health",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Verify Limit Order Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Order exists', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('order_id');",
+                  "    pm.expect(json).to.have.property('status');",
+                  "    ",
+                  "    // LIMIT ордер может быть PENDING (ждёт цену) или FILLED (FakeBroker сразу исполнил)",
+                  "    pm.expect(json.status).to.be.oneOf(['PENDING', 'FILLED', 'NEW']);",
+                  "    console.log('Limit order status:', json.status);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{accessToken}}"}],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders/{{limitOrderId}}",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders", "{{limitOrderId}}"]
+            }
+          }
+        },
+        {
+          "name": "Cancel Limit Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Cancel может вернуть 200 (успех) или 400/404 (уже исполнен)",
+                  "pm.test('Cancel processed', function() {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([200, 202, 400, 404]);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200 || pm.response.code === 202) {",
+                  "    console.log('Order cancelled successfully');",
+                  "} else {",
+                  "    console.log('Order already filled or not found');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [{"key": "Authorization", "value": "Bearer {{accessToken}}"}],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders/{{limitOrderId}}",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders", "{{limitOrderId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Negative Tests",
+      "item": [
+        {
+          "name": "Order without Auth Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401 Unauthorized', function() {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "",
+                  "pm.test('Error message present', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('error');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"figi\": \"BBG004730N88\", \"quantity\": 10, \"direction\": \"BUY\", \"type\": \"MARKET\"}"
+            },
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Order with Invalid FIGI",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 or 404', function() {",
+                  "    pm.expect(pm.response.code).to.be.oneOf([400, 404]);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"figi\": \"INVALID_FIGI\", \"quantity\": 10, \"direction\": \"BUY\", \"type\": \"MARKET\"}"
+            },
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Order with Zero Quantity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 Bad Request', function() {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"figi\": \"BBG004730N88\", \"quantity\": 0, \"direction\": \"BUY\", \"type\": \"MARKET\"}"
+            },
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Get Non-Existent Order",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404 Not Found', function() {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{accessToken}}"}],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders/non-existent-order-id",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders", "non-existent-order-id"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Final State - All Orders",
+      "item": [
+        {
+          "name": "Get All Orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Orders array returned', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.orders).to.be.an('array');",
+                  "    console.log('Total orders:', json.orders.length);",
+                  "    ",
+                  "    // Проверяем что наш market order есть в списке",
+                  "    var orderId = pm.collectionVariables.get('orderId');",
+                  "    var ourOrder = json.orders.find(o => o.order_id === orderId);",
+                  "    if (ourOrder) {",
+                  "        console.log('Our market order found, status:', ourOrder.status);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{accessToken}}"}],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Get Final Portfolio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Portfolio summary', function() {",
+                  "    var json = pm.response.json();",
+                  "    console.log('=== FINAL PORTFOLIO ===');",
+                  "    console.log('Cash:', json.cash.amount, json.cash.currency);",
+                  "    console.log('Total value:', json.total_value.amount, json.total_value.currency);",
+                  "    console.log('Positions:', json.positions.length);",
+                  "    ",
+                  "    json.positions.forEach(function(pos) {",
+                  "        console.log('  -', pos.ticker || pos.figi, 'qty:', pos.quantity);",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{accessToken}}"}],
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/portfolio",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "portfolio"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

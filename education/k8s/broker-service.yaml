@@ -78,6 +78,8 @@ spec:
                 secretKeyRef:
                   name: trading-secrets
                   key: RABBITMQ_PASSWORD
+            - name: RABBITMQ_EXCHANGE
+              value: "trading.events"      
             # Broker simulation settings
             - name: BROKER_FILL_BEHAVIOR
               value: "REALISTIC"

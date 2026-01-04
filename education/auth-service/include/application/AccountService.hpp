@@ -9,6 +9,12 @@ namespace auth::application {
 
 /**
  * @brief Сервис управления брокерскими аккаунтами
+ * 
+ * ВАЖНО: Для sandbox аккаунтов генерируется ID с "sandbox" в имени:
+ *   acc-sandbox-{uuid}
+ * 
+ * Это позволяет broker-service автоматически создавать такие аккаунты
+ * при первом обращении (безопасно, т.к. sandbox — тестовые деньги).
  */
 class AccountService : public ports::input::IAccountService {
 public:
@@ -23,7 +29,13 @@ public:
         const std::string& userId,
         const ports::input::CreateAccountRequest& request
     ) override {
-        std::string accountId = "acc-" + generateUuid();
+        // Генерируем ID с учётом типа аккаунта
+        // Для SANDBOX включаем "sandbox" в ID, чтобы broker мог автоматически создать
+        std::string accountId = "acc-";
+        if (request.type == domain::AccountType::SANDBOX) {
+            accountId += "sandbox-";
+        }
+        accountId += generateUuid();
         
         // Шифруем токен (TODO: RSA в production)
         std::string encryptedToken = encodeToken(request.tinkoffToken);
@@ -35,6 +47,9 @@ public:
             request.type,
             encryptedToken
         );
+        
+        std::cout << "[AccountService] Creating account: " << accountId 
+                  << " type=" << domain::toString(request.type) << std::endl;
         
         return accountRepo_->save(account);
     }

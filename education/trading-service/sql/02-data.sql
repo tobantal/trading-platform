@@ -1,10 +1,7 @@
 -- trading-service/sql/02-data.sql
--- Тестовые данные
+-- Seed данные для trading-service
 
--- Начальный баланс для тестового sandbox аккаунта (100,000 руб в копейках)
-INSERT INTO balances (account_id, currency, available, reserved, updated_at) VALUES
-('acc-sandbox-001', 'RUB', 10000000, 0, NOW())
-ON CONFLICT (account_id) DO UPDATE SET
-    available = EXCLUDED.available,
-    reserved = EXCLUDED.reserved,
-    updated_at = NOW();
+-- Trading-service не хранит данные локально.
+-- Все данные (балансы, позиции, ордера) запрашиваются из broker-service.
+-- Этот файл оставлен пустым для консистентности структуры.
+

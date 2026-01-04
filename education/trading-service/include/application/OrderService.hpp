@@ -1,3 +1,4 @@
+// trading-service/include/application/OrderService.hpp
 #pragma once
 
 #include "ports/input/IOrderService.hpp"
@@ -19,14 +20,9 @@ namespace trading::application {
  * @brief Сервис управления ордерами
  * 
  * Архитектура:
- * - POST (создание) → публикует событие в RabbitMQ → broker слушает
+ * - POST (создание) → валидация FIGI → публикует событие в RabbitMQ → broker слушает
  * - DELETE (отмена) → публикует событие в RabbitMQ → broker слушает
  * - GET (чтение) → HTTP запрос к broker-service
- * 
- * Это обеспечивает:
- * - Асинхронную обработку ордеров
- * - Надёжную доставку через RabbitMQ
- * - Актуальные данные при чтении
  */
 class OrderService : public ports::input::IOrderService {
 public:
@@ -43,15 +39,26 @@ public:
     /**
      * @brief Создать ордер (публикует в RabbitMQ)
      * 
+     * Валидирует FIGI перед отправкой.
      * Возвращает OrderResult со статусом PENDING и сгенерированным orderId.
      * Реальное исполнение произойдёт асинхронно в broker-service.
      */
     domain::OrderResult placeOrder(const domain::OrderRequest& request) override {
         domain::OrderResult result;
         result.orderId = generateOrderId();
+        result.timestamp = domain::Timestamp::now();
+
+        // Валидация FIGI перед отправкой
+        auto instrument = broker_->getInstrumentByFigi(request.figi);
+        if (!instrument) {
+            std::cout << "[OrderService] REJECTED: Invalid FIGI " << request.figi << std::endl;
+            result.status = domain::OrderStatus::REJECTED;
+            result.message = "Invalid FIGI: " + request.figi;
+            return result;
+        }
+
         result.status = domain::OrderStatus::PENDING;
         result.message = "Order submitted for processing";
-        result.timestamp = domain::Timestamp::now();
 
         try {
             // Формируем событие
@@ -104,11 +111,21 @@ public:
     /**
      * @brief Получить ордер по ID (HTTP к broker-service)
      */
-    std::optional<domain::Order> getOrderById(const std::string& orderId) override {
-        // Нам нужен accountId для запроса, но у нас его нет
-        // В реальности здесь нужно либо хранить mapping orderId->accountId,
-        // либо изменить API broker-service
-        // Пока возвращаем nullopt - это будет работать через getOrders
+    std::optional<domain::Order> getOrderById(
+        const std::string& accountId, 
+        const std::string& orderId) override 
+    {
+        // Получаем все ордера аккаунта и ищем нужный
+        auto orders = broker_->getOrders(accountId);
+        
+        for (const auto& order : orders) {
+            if (order.id == orderId) {
+                std::cout << "[OrderService] Found order " << orderId << std::endl;
+                return order;
+            }
+        }
+        
+        std::cout << "[OrderService] Order not found: " << orderId << std::endl;
         return std::nullopt;
     }
 
