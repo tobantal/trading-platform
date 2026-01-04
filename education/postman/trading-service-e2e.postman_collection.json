@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Trading Service E2E Tests",
-    "description": "End-to-End тесты для Trading Service с Event-Driven архитектурой.\n\nПоток:\n1. Auth: Login → Get Accounts → Get Access Token\n2. Portfolio: Проверка начального баланса\n3. Orders: POST → PENDING → (RabbitMQ) → GET → FILLED\n4. Portfolio: Проверка изменений после сделки",
+    "description": "End-to-End тесты для Trading Service с Event-Driven архитектурой.\n\nПоток:\n1. Auth: Login → Get Accounts → Get Access Token\n2. Portfolio: Проверка начального баланса\n3. Orders: POST → PENDING → (RabbitMQ) → GET → FILLED\n4. Portfolio: Проверка изменений после сделки\n5. Idempotency: Проверка идемпотентности запросов",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -14,7 +14,9 @@
     {"key": "limitOrderId", "value": "", "type": "string"},
     {"key": "initialCash", "value": "0", "type": "string"},
     {"key": "testFigi", "value": "BBG004730N88", "type": "string"},
-    {"key": "asyncDelayMs", "value": "1500", "type": "string"}
+    {"key": "asyncDelayMs", "value": "1500", "type": "string"},
+    {"key": "idempotencyKey", "value": "", "type": "string"},
+    {"key": "idempotentOrderId", "value": "", "type": "string"}
   ],
   "item": [
     {
@@ -794,6 +796,206 @@
           }
         }
       ]
+    },
+    {
+      "name": "6. Idempotency Tests",
+      "description": "Проверка идемпотентности: повторный запрос с тем же X-Idempotency-Key возвращает тот же результат",
+      "item": [
+        {
+          "name": "Step 1: Create Order with Idempotency Key",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Генерируем уникальный ключ для теста",
+                  "var idempotencyKey = 'e2e-test-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);",
+                  "pm.collectionVariables.set('idempotencyKey', idempotencyKey);",
+                  "console.log('Generated idempotency key:', idempotencyKey);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Returns order_id', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('order_id');",
+                  "    pm.collectionVariables.set('idempotentOrderId', json.order_id);",
+                  "    console.log('First request - order_id:', json.order_id);",
+                  "});",
+                  "",
+                  "pm.test('No X-Idempotency-Key-Used header (first request)', function() {",
+                  "    var header = pm.response.headers.get('X-Idempotency-Key-Used');",
+                  "    pm.expect(header).to.be.oneOf([null, undefined, 'false']);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"},
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "X-Idempotency-Key", "value": "{{idempotencyKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"figi\": \"{{testFigi}}\",\n    \"quantity\": 1,\n    \"direction\": \"BUY\",\n    \"type\": \"MARKET\"\n}"
+            },
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Step 2: Retry with SAME Idempotency Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 (cached response)', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Returns SAME order_id (idempotent)', function() {",
+                  "    var json = pm.response.json();",
+                  "    var expectedOrderId = pm.collectionVariables.get('idempotentOrderId');",
+                  "    ",
+                  "    pm.expect(json.order_id).to.eql(expectedOrderId);",
+                  "    console.log('Retry request - order_id:', json.order_id);",
+                  "    console.log('Expected order_id:', expectedOrderId);",
+                  "    console.log('✅ IDEMPOTENCY WORKS: Same order_id returned!');",
+                  "});",
+                  "",
+                  "pm.test('X-Idempotency-Key-Used header is true', function() {",
+                  "    var header = pm.response.headers.get('X-Idempotency-Key-Used');",
+                  "    pm.expect(header).to.eql('true');",
+                  "    console.log('X-Idempotency-Key-Used:', header);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"},
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "X-Idempotency-Key", "value": "{{idempotencyKey}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"figi\": \"{{testFigi}}\",\n    \"quantity\": 1,\n    \"direction\": \"BUY\",\n    \"type\": \"MARKET\"\n}"
+            },
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Step 3: Request with DIFFERENT Idempotency Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Returns DIFFERENT order_id (new order)', function() {",
+                  "    var json = pm.response.json();",
+                  "    var previousOrderId = pm.collectionVariables.get('idempotentOrderId');",
+                  "    ",
+                  "    pm.expect(json.order_id).to.not.eql(previousOrderId);",
+                  "    console.log('New key - new order_id:', json.order_id);",
+                  "    console.log('Previous order_id:', previousOrderId);",
+                  "    console.log('✅ Different key = different order');",
+                  "});",
+                  "",
+                  "pm.test('No X-Idempotency-Key-Used header', function() {",
+                  "    var header = pm.response.headers.get('X-Idempotency-Key-Used');",
+                  "    pm.expect(header).to.be.oneOf([null, undefined, 'false']);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"},
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "X-Idempotency-Key", "value": "different-key-{{$timestamp}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"figi\": \"{{testFigi}}\",\n    \"quantity\": 1,\n    \"direction\": \"BUY\",\n    \"type\": \"MARKET\"\n}"
+            },
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        },
+        {
+          "name": "Step 4: Request WITHOUT Idempotency Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 201 (works without key)', function() {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Returns new order_id', function() {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('order_id');",
+                  "    console.log('No idempotency key - order_id:', json.order_id);",
+                  "    console.log('✅ Works without idempotency key');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{accessToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"figi\": \"{{testFigi}}\",\n    \"quantity\": 1,\n    \"direction\": \"BUY\",\n    \"type\": \"MARKET\"\n}"
+            },
+            "url": {
+              "raw": "{{tradingBaseUrl}}/api/v1/orders",
+              "host": ["{{tradingBaseUrl}}"],
+              "path": ["api", "v1", "orders"]
+            }
+          }
+        }
+      ]
     }
   ]
 }
+
