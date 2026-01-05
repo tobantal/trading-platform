@@ -285,6 +285,7 @@ public:
         }
         
         BrokerOrderRequest brokerReq;
+        brokerReq.orderId = request.orderId;
         brokerReq.accountId = accountId;
         brokerReq.figi = request.figi;
         brokerReq.direction = convertDirection(request.direction);
@@ -301,18 +302,19 @@ public:
         // Логируем результат
         if (result.status == domain::OrderStatus::REJECTED) {
             std::cout << "[FakeBrokerAdapter] REJECTED order=" << result.orderId 
-                      << " reason=" << result.message << std::endl;
+                    << " reason=" << result.message << std::endl;
         } else {
             std::cout << "[FakeBrokerAdapter] Order " << result.orderId 
-                      << " status=" << static_cast<int>(result.status) << std::endl;
+                    << " status=" << static_cast<int>(result.status) << std::endl;
+        }
 
-            persistOrder(result.orderId, accountId, request, result);
-            
-            if (result.status == domain::OrderStatus::FILLED) {
-                persistBalanceAndPositions(accountId);
-                // Публикуем portfolio.updated после исполнения
-                publishPortfolioUpdate(accountId);
-            }
+        // Сохраняем ордер ВСЕГДА (включая rejected)
+        persistOrder(result.orderId, accountId, request, result);
+
+        if (result.status == domain::OrderStatus::FILLED) {
+            persistBalanceAndPositions(accountId);
+            // Публикуем portfolio.updated после исполнения
+            publishPortfolioUpdate(accountId);
         }
         
         return result;

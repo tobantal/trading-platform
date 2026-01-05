@@ -105,9 +105,13 @@ kind: Service
 metadata:
   name: broker-service
   namespace: trading
+  labels:
+    app.kubernetes.io/part-of: trading-platform
+    app.kubernetes.io/name: broker-service
 spec:
   selector:
     app: broker-service
   ports:
     - port: 8083
       targetPort: 8083
+      name: http

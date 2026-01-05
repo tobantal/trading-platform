@@ -143,10 +143,15 @@ private:
         std::string orderId = json.value("order_id", "");
         std::string accountId = json.value("account_id", "");
         
+        std::cout << "[OrderCommandHandler] CANCEL order_id=" << orderId << " account_id=" << accountId << std::endl;
+        
         bool cancelled = brokerGateway_->cancelOrder(accountId, orderId);
+        
+        std::cout << "[OrderCommandHandler] cancelOrder=" << (cancelled ? "true" : "false") << std::endl;
         
         if (cancelled) {
             publishOrderCancelled(orderId, accountId);
+            std::cout << "[OrderCommandHandler] Published order.cancelled" << std::endl;
         }
     }
 

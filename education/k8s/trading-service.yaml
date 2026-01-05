@@ -96,9 +96,13 @@ kind: Service
 metadata:
   name: trading-service
   namespace: trading
+  labels:
+    app.kubernetes.io/part-of: trading-platform
+    app.kubernetes.io/name: trading-service
 spec:
   selector:
     app: trading-service
   ports:
     - port: 8082
       targetPort: 8082
+      name: http

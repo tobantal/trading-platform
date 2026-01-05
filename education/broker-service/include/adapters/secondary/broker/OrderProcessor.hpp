@@ -51,6 +51,7 @@ inline std::string toString(Status s) {
  * @brief Запрос на создание ордера (изолированный от domain)
  */
 struct OrderRequest {
+    std::string orderId;
     std::string accountId;
     std::string figi;
     Direction direction = Direction::BUY;
@@ -135,7 +136,7 @@ public:
     OrderResult processOrder(const OrderRequest& request, const MarketScenario& scenario) {
         // 1. Проверка rejection
         if (shouldReject(scenario)) {
-            return rejectOrder(scenario.rejectReason.empty() 
+            return rejectOrder(request, scenario.rejectReason.empty() 
                 ? "Order rejected by scenario" 
                 : scenario.rejectReason);
         }
@@ -143,7 +144,7 @@ public:
         // 2. Получаем котировку
         auto quoteOpt = priceSimulator_->getQuote(request.figi);
         if (!quoteOpt) {
-            return rejectOrder("Instrument not found: " + request.figi);
+            return rejectOrder(request, "Instrument not found: " + request.figi);
         }
         
         const auto& quote = *quoteOpt;
@@ -163,12 +164,12 @@ public:
                 return queueForDelayedFill(request);
                 
             case OrderFillBehavior::ALWAYS_REJECT:
-                return rejectOrder(scenario.rejectReason.empty() 
+                return rejectOrder(request, scenario.rejectReason.empty() 
                     ? "Always reject mode" 
                     : scenario.rejectReason);
         }
         
-        return rejectOrder("Unknown fill behavior");
+        return rejectOrder(request, "Unknown fill behavior");
     }
     
     /**
@@ -266,10 +267,6 @@ private:
     std::mt19937 rng_;
     std::atomic<uint64_t> orderCounter_{0};
     
-    std::string generateOrderId() {
-        return "ORD-" + std::to_string(++orderCounter_);
-    }
-    
     bool shouldReject(const MarketScenario& scenario) {
         if (scenario.rejectProbability <= 0.0) return false;
         if (scenario.rejectProbability >= 1.0) return true;
@@ -278,9 +275,9 @@ private:
         return dist(rng_) < scenario.rejectProbability;
     }
     
-    OrderResult rejectOrder(const std::string& reason) {
+    OrderResult rejectOrder(const OrderRequest& request, const std::string& reason) {
         OrderResult result;
-        result.orderId = generateOrderId();
+        result.orderId = request.orderId;
         result.status = Status::REJECTED;
         result.message = reason;
         return result;
@@ -290,7 +287,7 @@ private:
         double fillPrice = (request.direction == Direction::BUY) ? quote.ask : quote.bid;
         
         OrderResult result;
-        result.orderId = generateOrderId();
+        result.orderId = request.orderId;
         result.status = Status::FILLED;
         result.executedPrice = fillPrice;
         result.executedQuantity = request.quantity;
@@ -320,7 +317,7 @@ private:
                 : basePrice - slippage;
             
             OrderResult result;
-            result.orderId = generateOrderId();
+            result.orderId = request.orderId;
             result.status = Status::FILLED;
             result.executedPrice = fillPrice;
             result.executedQuantity = request.quantity;
@@ -346,7 +343,7 @@ private:
             
             if (canFillNow) {
                 OrderResult result;
-                result.orderId = generateOrderId();
+                result.orderId = request.orderId;
                 result.status = Status::FILLED;
                 result.executedPrice = fillPrice;
                 result.executedQuantity = request.quantity;
@@ -370,7 +367,7 @@ private:
         );
         
         OrderResult result;
-        result.orderId = generateOrderId();
+        result.orderId = request.orderId;
         result.status = (filledQty < request.quantity) 
             ? Status::PARTIALLY_FILLED 
             : Status::FILLED;
@@ -385,7 +382,7 @@ private:
         std::lock_guard<std::mutex> lock(mutex_);
         
         PendingOrder pending;
-        pending.orderId = generateOrderId();
+        pending.orderId = request.orderId;
         pending.accountId = request.accountId;
         pending.figi = request.figi;
         pending.direction = request.direction;
@@ -408,7 +405,7 @@ private:
         std::lock_guard<std::mutex> lock(mutex_);
         
         PendingOrder pending;
-        pending.orderId = generateOrderId();
+        pending.orderId = request.orderId;
         pending.accountId = request.accountId;
         pending.figi = request.figi;
         pending.direction = request.direction;

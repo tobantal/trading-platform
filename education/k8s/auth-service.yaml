@@ -76,9 +76,13 @@ kind: Service
 metadata:
   name: auth-service
   namespace: trading
+  labels:
+    app.kubernetes.io/part-of: trading-platform
+    app.kubernetes.io/name: auth-service
 spec:
   selector:
     app: auth-service
   ports:
     - port: 8081
       targetPort: 8081
+      name: http
