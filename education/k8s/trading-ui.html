@@ -53,6 +53,7 @@
         .badge.pending { background: #f39c12; color: white; }
         .badge.rejected { background: #e74c3c; color: white; }
         .badge.cancelled { background: #95a5a6; color: white; }
+        .badge.partially_filled { background: #3498db; color: white; }
         .header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
         .user-info { font-size: 14px; color: #666; }
         .refresh-indicator { position: fixed; top: 10px; right: 10px; background: rgba(102, 126, 234, 0.9); color: white; padding: 5px 10px; border-radius: 4px; font-size: 12px; display: none; }
@@ -64,6 +65,7 @@
         .price { font-family: monospace; }
         .price-green { color: #27ae60; }
         .price-red { color: #e74c3c; }
+        .hint { font-size: 11px; color: #888; }
     </style>
 </head>
 <body>
@@ -72,10 +74,10 @@
         <!-- LOGIN -->
         <div id="loginPage" class="page active">
             <h1>Trading Platform</h1>
-            <p>C++17, Boost.Beast, RabbitMQ</p>
+            <p>C++17 • Boost.Beast • RabbitMQ • Kubernetes</p>
             <div id="loginStatus"></div>
-            <div class="form-group"><label>Username</label><input type="text" id="loginUsername" placeholder="username"></div>
-            <div class="form-group"><label>Password</label><input type="password" id="loginPassword" placeholder="password"></div>
+            <div class="form-group"><label>Username</label><input type="text" id="loginUsername" placeholder="username" value="testuser"></div>
+            <div class="form-group"><label>Password</label><input type="password" id="loginPassword" placeholder="password" value="test123"></div>
             <button onclick="login()">Войти</button>
             <button class="secondary" onclick="showPage('registerPage')">Регистрация</button>
         </div>
@@ -147,7 +149,9 @@
         function formatMoney(m) { 
             if(!m) return '0.00 RUB';
             if(typeof m === 'number') return m.toFixed(2) + ' RUB';
-            if(m.amount !== undefined) return (m.amount/100).toFixed(2) + ' ' + (m.currency||'RUB');
+            // Trading-service возвращает amount уже в рублях
+            if(m.amount !== undefined) return m.amount.toFixed(2) + ' ' + (m.currency||'RUB');
+            // Broker-service возвращает units/nano (Tinkoff формат)
             var units = m.units || 0;
             var nano = m.nano || 0;
             return (units + nano/1e9).toFixed(2) + ' ' + (m.currency||'RUB'); 
@@ -162,7 +166,7 @@
             return (units + nano/1e9).toFixed(2); 
         }
         
-        function badge(s) { return '<span class="badge '+((s||'').toLowerCase())+'">'+s+'</span>'; }
+        function badge(s) { return '<span class="badge '+((s||'').toLowerCase().replace('_','-'))+'">'+s+'</span>'; }
         
         function api(url, opt) {
             opt = opt || {};
@@ -174,7 +178,18 @@
             var u = document.getElementById('loginUsername').value, p = document.getElementById('loginPassword').value;
             if(!u||!p) { showStatus('loginStatus','Введите username и пароль','error'); return; }
             api(CONFIG.AUTH_URL+'/api/v1/auth/login', { method:'POST', body:JSON.stringify({username:u,password:p}) })
-            .then(function(d) { state.sessionToken = d.session_token; state.currentUsername = u; localStorage.setItem('sessionToken', d.session_token); localStorage.setItem('currentUsername', u); loadAccounts(); })
+            .then(function(d) { 
+                // Если сменился пользователь - очищаем сохранённый аккаунт
+                if(state.currentUsername && state.currentUsername !== u) {
+                    localStorage.removeItem('currentAccountId');
+                    state.currentAccountId = null;
+                }
+                state.sessionToken = d.session_token; 
+                state.currentUsername = u; 
+                localStorage.setItem('sessionToken', d.session_token); 
+                localStorage.setItem('currentUsername', u); 
+                loadAccounts(); 
+            })
             .catch(function(e) { showStatus('loginStatus','Ошибка: '+e.message,'error'); });
         }
         
@@ -217,7 +232,20 @@
             localStorage.setItem('currentAccountId', id);
             api(CONFIG.AUTH_URL+'/api/v1/auth/access-token', { method:'POST', headers:{'Authorization':'Bearer '+state.sessionToken}, body:JSON.stringify({account_id:id}) })
             .then(function(d) { state.accessToken = d.access_token; document.getElementById('currentAccount').textContent = id; showPage('tradingPage'); loadInstruments(); startPolling(); })
-            .catch(function(e) { showStatus('accountsStatus','Ошибка: '+e.message,'error'); });
+            .catch(function(e) { 
+                console.error('selectAccount error:', e);
+                // Очищаем невалидный accountId
+                localStorage.removeItem('currentAccountId');
+                state.currentAccountId = null;
+                // Если ошибка авторизации - на логин
+                if(e.message.indexOf('401') !== -1 || e.message.indexOf('Unauthorized') !== -1 || e.message.indexOf('Invalid session') !== -1) {
+                    logout();
+                } else {
+                    // Иначе показываем список аккаунтов (напр. "Account does not belong to this user")
+                    showStatus('accountsStatus','Ошибка: '+e.message,'error'); 
+                    loadAccounts();
+                }
+            });
         }
         
         function backToAccounts() { stopPolling(); loadAccounts(); }
@@ -235,7 +263,6 @@
         
         function loadQuotes() {
             if(state.instruments.length === 0) { renderInstruments(); return; }
-            // API: /api/v1/quotes?figis=XXX,YYY,ZZZ
             var figis = state.instruments.map(function(i){ return i.figi; }).join(',');
             api(CONFIG.TRADING_URL+'/api/v1/quotes?figis='+figis, { headers:{'Authorization':'Bearer '+state.accessToken} })
             .then(function(d) { 
@@ -253,10 +280,11 @@
         }
         
         function renderInstruments() {
-            var h = '<table><tr><th>Ticker</th><th>Name</th><th>Bid</th><th>Ask</th><th>Last</th></tr>';
+            var h = '<table><tr><th>Ticker</th><th>Name</th><th>Лот</th><th>Bid</th><th>Ask</th><th>Last</th></tr>';
             state.instruments.forEach(function(i) { 
                 var q = state.quotes[i.figi] || {};
                 h+='<tr><td><strong>'+i.ticker+'</strong></td><td style="font-size:11px;">'+i.name+'</td>';
+                h+='<td>'+(i.lot||1)+'</td>';
                 h+='<td class="price price-green">'+(q.bid_price ? formatPrice(q.bid_price) : '-')+'</td>';
                 h+='<td class="price price-red">'+(q.ask_price ? formatPrice(q.ask_price) : '-')+'</td>';
                 h+='<td class="price">'+(q.last_price ? formatPrice(q.last_price) : '-')+'</td></tr>'; 
@@ -268,12 +296,14 @@
             var figi = document.getElementById('orderFigi').value;
             var q = state.quotes[figi];
             var instr = state.instruments.find(function(i){return i.figi===figi;});
-            var html = '<strong>'+(instr?instr.ticker+' ('+instr.name+')':'')+'</strong><br>';
+            var html = '<strong>'+(instr?instr.ticker+' ('+instr.name+')':'')+'</strong>';
+            if(instr) html += ' <span class="hint">Лот: '+(instr.lot||1)+' шт.</span>';
+            html += '<br>';
             if(q) {
                 html += 'Bid: <span class="price price-green">'+formatPrice(q.bid_price)+'</span> | ';
                 html += 'Ask: <span class="price price-red">'+formatPrice(q.ask_price)+'</span> | ';
                 html += 'Last: <span class="price">'+formatPrice(q.last_price)+'</span>';
-                html += '<div style="font-size:11px;color:#666;margin-top:5px;">YNDX: PENDING ~3сек (можно отменить). GAZP: always reject.</div>';
+                html += '<div class="hint" style="margin-top:5px;">SBER: instant • GAZP: reject • YNDX: 3s pending • LKOH: 10s pending • MGNT: partial 50%</div>';
             } else {
                 html += '<span style="color:#999;">Котировки загружаются...</span>';
             }
@@ -286,11 +316,14 @@
                 document.getElementById('balanceInfo').innerHTML = formatMoney(d.cash||d.balance||{});
                 var pos = d.positions || [];
                 if(pos.length===0) { document.getElementById('positionsTable').innerHTML = '<div class="empty-state">Нет позиций</div>'; }
-                else { var h='<table><tr><th>Ticker</th><th>Qty</th><th>Avg</th></tr>'; 
+                else { var h='<table><tr><th>Ticker</th><th>Лоты</th><th>Бумаги</th><th>Avg</th></tr>'; 
                     pos.forEach(function(p){
                         var instr = state.instruments.find(function(i){return i.figi===p.figi;});
                         var ticker = instr ? instr.ticker : p.figi.substring(0,8);
-                        h+='<tr><td>'+ticker+'</td><td>'+(p.quantity||p.lots)+'</td><td class="price">'+formatPrice(p.average_price)+'</td></tr>';
+                        var lot = instr ? (instr.lot||1) : 1;
+                        var qty = p.quantity || p.lots || 0;
+                        var lots = Math.floor(qty / lot);
+                        h+='<tr><td>'+ticker+'</td><td>'+lots+'</td><td>'+qty+'</td><td class="price">'+formatPrice(p.average_price)+'</td></tr>';
                     }); 
                     document.getElementById('positionsTable').innerHTML = h+'</table>'; 
                 }
@@ -305,9 +338,16 @@
                     orders.slice(0,30).forEach(function(o){ 
                         var instr = state.instruments.find(function(i){return i.figi===o.figi;});
                         var ticker = instr ? instr.ticker : o.figi.substring(0,6);
+                        // Qty: показываем executed/requested для PARTIALLY_FILLED
+                        var qtyStr = o.quantity;
+                        if(o.executed_quantity !== undefined && o.executed_quantity !== o.quantity) {
+                            qtyStr = o.executed_quantity + '/' + o.quantity;
+                        }
+                        // Price: предпочитаем executed_price
+                        var priceVal = o.executed_price || o.price || 0;
                         h+='<tr><td><code style="font-size:10px;">'+(o.order_id||'').substring(0,10)+'</code></td>';
-                        h+='<td>'+ticker+'</td><td>'+o.direction+'</td><td>'+o.quantity+'</td>';
-                        h+='<td class="price">'+formatPrice(o.price)+'</td>';
+                        h+='<td>'+ticker+'</td><td>'+o.direction+'</td><td>'+qtyStr+'</td>';
+                        h+='<td class="price">'+formatPrice(priceVal)+'</td>';
                         h+='<td>'+badge(o.status)+'</td>';
                         h+='<td>'+(o.status==='PENDING'?'<button class="danger" style="padding:5px 10px;" onclick="cancelOrder(\''+o.order_id+'\')">X</button>':'')+'</td></tr>'; 
                     });
@@ -348,7 +388,14 @@
         });
         document.getElementById('orderType').addEventListener('change',function(){ document.getElementById('priceGroup').style.display = this.value==='LIMIT'?'block':'none'; });
         
-        if(state.sessionToken) loadAccounts();
+        if(state.sessionToken) {
+            // Если есть сохранённый аккаунт - автоматически восстанавливаем сессию
+            if(state.currentAccountId) {
+                selectAccount(state.currentAccountId);
+            } else {
+                loadAccounts();
+            }
+        }
     </script>
 </body>
 </html>

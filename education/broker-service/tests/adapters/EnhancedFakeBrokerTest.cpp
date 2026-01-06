@@ -60,6 +60,7 @@ protected:
     std::unique_ptr<EnhancedFakeBroker> broker_;
     const std::string TEST_ACCOUNT = "test-account";
     const std::string SBER_FIGI = "BBG004730N88";
+    const std::string LKOH_FIGI = "BBG004731032";
 };
 
 
@@ -188,8 +189,12 @@ TEST_F(EnhancedFakeBrokerTest, SetScenario_AlwaysReject) {
 // ORDER MANAGEMENT
 // ============================================================================
 
+// TODO: нестабильный тест, зависит от настроек брокера
+// сейчас у LKOH стоит 10 секунд ожидания (pending), поэтому тест должен проходить
+// в будущем передавать расширенные настройки, т.е. вначале для бумаги установить pending 3s,
+// потом запускать проверку отмены.
 TEST_F(EnhancedFakeBrokerTest, CancelOrder_PendingLimit) {
-    auto req = createBuyLimit(SBER_FIGI, 10, 200.0);
+    auto req = createBuyLimit(LKOH_FIGI, 10, 200.0);
     auto result = broker_->placeOrder(TEST_ACCOUNT, req);
     EXPECT_EQ(result.status, Status::PENDING);
     

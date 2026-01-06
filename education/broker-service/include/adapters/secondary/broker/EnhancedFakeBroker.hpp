@@ -755,7 +755,7 @@ namespace broker::adapters::secondary
             instruments_["BBG006L8G4H1"] = {"BBG006L8G4H1", "YNDX", "Яндекс", "RUB", 1, 0.1};
             priceSimulator_->initInstrument("BBG006L8G4H1", 3500.0, 0.002, 0.004);
             ticker_->addInstrument("BBG006L8G4H1");
-            setScenario("BBG006L8G4H1", MarketScenario::realistic(3500.0));
+            setScenario("BBG006L8G4H1", MarketScenario::delayed(3500.0, std::chrono::milliseconds{3000}));
 
             // LKOH - с задержкой (для теста order.cancelled)
             instruments_["BBG004731032"] = {"BBG004731032", "LKOH", "Лукойл", "RUB", 1, 0.5};
