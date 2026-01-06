@@ -90,7 +90,9 @@ struct PendingOrder {
     Type type;
     int64_t quantity;
     double limitPrice;
-    std::chrono::system_clock::time_point createdAt;
+    std::chrono::system_clock::time_point createdAt; // время, после которого нужно исполнить (для DELAYED)
+    std::chrono::system_clock::time_point fillAfter;
+    bool isDelayedMarket = false;  // флаг для DELAYED market orders
 };
 
 /**
@@ -161,7 +163,7 @@ public:
                 return fillPartially(request, quote, scenario);
                 
             case OrderFillBehavior::DELAYED:
-                return queueForDelayedFill(request);
+                return queueForDelayedFill(request, scenario.fillDelay);
                 
             case OrderFillBehavior::ALWAYS_REJECT:
                 return rejectOrder(request, scenario.rejectReason.empty() 
@@ -178,6 +180,7 @@ public:
     void processPendingOrders(const MarketScenario& scenario) {
         std::lock_guard<std::mutex> lock(mutex_);
         
+        auto now = std::chrono::system_clock::now();
         std::vector<std::string> filledOrders;
         
         for (auto& [orderId, order] : pendingOrders_) {
@@ -188,17 +191,27 @@ public:
             bool shouldFill = false;
             double fillPrice = 0.0;
             
-            if (order.direction == Direction::BUY) {
-                // Buy limit: fill если ask <= limitPrice
-                if (quote.ask <= order.limitPrice) {
+            // Для DELAYED market orders - проверяем время
+            if (order.isDelayedMarket) {
+                if (now >= order.fillAfter) {
                     shouldFill = true;
-                    fillPrice = quote.ask;
+                    fillPrice = (order.direction == Direction::BUY) ? quote.ask : quote.bid;
                 }
-            } else {
-                // Sell limit: fill если bid >= limitPrice
-                if (quote.bid >= order.limitPrice) {
-                    shouldFill = true;
-                    fillPrice = quote.bid;
+            }
+            // Для LIMIT orders - проверяем цену
+            else if (order.type == Type::LIMIT) {
+                if (order.direction == Direction::BUY) {
+                    // Buy limit: fill если ask <= limitPrice
+                    if (quote.ask <= order.limitPrice) {
+                        shouldFill = true;
+                        fillPrice = quote.ask;
+                    }
+                } else {
+                    // Sell limit: fill если bid >= limitPrice
+                    if (quote.bid >= order.limitPrice) {
+                        shouldFill = true;
+                        fillPrice = quote.bid;
+                    }
                 }
             }
             
@@ -378,8 +391,11 @@ private:
         return result;
     }
     
-    OrderResult queueForDelayedFill(const OrderRequest& request) {
+    OrderResult queueForDelayedFill(const OrderRequest& request, 
+                                    std::chrono::milliseconds delay) {
         std::lock_guard<std::mutex> lock(mutex_);
+        
+        auto now = std::chrono::system_clock::now();
         
         PendingOrder pending;
         pending.orderId = request.orderId;
@@ -389,14 +405,18 @@ private:
         pending.type = request.type;
         pending.quantity = request.quantity;
         pending.limitPrice = request.price;
-        pending.createdAt = std::chrono::system_clock::now();
+        pending.createdAt = now;
+        // устанавливаем время исполнения
+        pending.fillAfter = now + delay;
+        pending.isDelayedMarket = true;
         
         pendingOrders_[pending.orderId] = pending;
         
         OrderResult result;
         result.orderId = pending.orderId;
         result.status = Status::PENDING;
-        result.message = "Queued for delayed fill";
+        result.message = "Queued for delayed fill (delay=" + 
+                        std::to_string(delay.count()) + "ms)";
         
         return result;
     }

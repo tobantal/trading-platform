@@ -362,6 +362,14 @@ private:
             j.value("quantity", 0),
             price
         );
+
+        if (j.contains("executed_price")) {
+            order.executedPrice = parseMoney(j["executed_price"]);
+        }
+        
+        order.executedQuantity = j.value("executed_quantity", 
+                                 j.value("filled_quantity",
+                                 j.value("executed_lots", int64_t{0})));
         
         order.updateStatus(domain::parseOrderStatus(j.value("status", "PENDING")));
         return order;

@@ -143,6 +143,8 @@ private:
             {"currency", order.price.currency}
         };
         j["status"] = domain::toString(order.status);
+        j["executed_price"] = order.executedPrice.toDouble();
+        j["executed_quantity"] = order.executedQuantity;
         return j;
     }
 

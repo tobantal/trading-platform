@@ -222,6 +222,8 @@ private:
         j["type"] = domain::toString(order.type);
         j["quantity"] = order.quantity;
         j["price"] = order.price.toDouble();
+        j["executed_price"] = order.executedPrice.toDouble();
+        j["executed_quantity"] = order.executedQuantity;
         j["currency"] = order.price.currency;
         j["status"] = domain::toString(order.status);
         j["created_at"] = order.createdAt.toString();

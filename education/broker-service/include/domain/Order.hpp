@@ -20,11 +20,13 @@ struct Order {
     OrderType type;             ///< MARKET / LIMIT
     int64_t quantity = 0;       ///< Количество лотов
     Money price;                ///< Цена (для LIMIT ордеров)
+    Money executedPrice;          ///< Цена исполнения
+    int64_t executedQuantity = 0; ///< Исполнено лотов
     OrderStatus status;         ///< Статус ордера
     Timestamp createdAt;        ///< Дата создания
     Timestamp updatedAt;        ///< Дата последнего обновления
 
-    Order() : status(OrderStatus::PENDING) {}
+    Order() : quantity(0), executedQuantity(0), status(OrderStatus::PENDING) {}
 
     Order(
         const std::string& id,

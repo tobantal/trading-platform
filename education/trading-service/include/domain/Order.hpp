@@ -1,3 +1,4 @@
+// trading-service/include/domain/Order.hpp
 #pragma once
 
 #include "Money.hpp"
@@ -21,6 +22,9 @@ public:
     OrderType type;
     int64_t quantity;
     Money price;
+    // FIX: добавлены поля для исполненной цены и количества
+    Money executedPrice;
+    int64_t executedQuantity = 0;
     OrderStatus status;
     Timestamp createdAt;
     Timestamp updatedAt;
@@ -29,6 +33,7 @@ public:
         : direction(OrderDirection::BUY)
         , type(OrderType::MARKET)
         , quantity(0)
+        , executedQuantity(0)
         , status(OrderStatus::PENDING)
     {}
 
@@ -42,6 +47,7 @@ public:
         , type(t)
         , quantity(qty)
         , price(p)
+        , executedQuantity(0)
         , status(OrderStatus::PENDING)
         , createdAt(Timestamp::now())
         , updatedAt(Timestamp::now())
@@ -49,6 +55,16 @@ public:
 
     void updateStatus(OrderStatus newStatus) {
         status = newStatus;
+        updatedAt = Timestamp::now();
+    }
+    
+    /**
+     * @brief Обновить статус и данные исполнения
+     */
+    void fill(const Money& execPrice, int64_t execQty) {
+        executedPrice = execPrice;
+        executedQuantity = execQty;
+        status = (execQty >= quantity) ? OrderStatus::FILLED : OrderStatus::PARTIALLY_FILLED;
         updatedAt = Timestamp::now();
     }
 };

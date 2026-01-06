@@ -792,6 +792,8 @@ private:
         order.quantity = bo.requestedLots;
         order.price = domain::Money::fromDouble(bo.price, "RUB");
         order.status = statusFromString(bo.status);
+        order.executedPrice = domain::Money::fromDouble(bo.executedPrice, "RUB");
+        order.executedQuantity = bo.executedLots;
         return order;
     }
     
