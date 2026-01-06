@@ -518,6 +518,7 @@ private:
                 auto order = orderRepo_->findById(e.orderId);
                 if (order) {
                     order->executedLots += e.quantity;
+                    order->executedPrice = e.price;
                     order->status = (order->executedLots >= order->requestedLots) 
                         ? "FILLED" 
                         : "PARTIALLY_FILLED";

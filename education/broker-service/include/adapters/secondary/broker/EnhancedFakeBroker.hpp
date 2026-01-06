@@ -755,13 +755,13 @@ namespace broker::adapters::secondary
             instruments_["BBG006L8G4H1"] = {"BBG006L8G4H1", "YNDX", "Яндекс", "RUB", 1, 0.1};
             priceSimulator_->initInstrument("BBG006L8G4H1", 3500.0, 0.002, 0.004);
             ticker_->addInstrument("BBG006L8G4H1");
-            setScenario("BBG006L8G4H1", MarketScenario::delayed(3500.0, std::chrono::milliseconds{3000}));
+            setScenario("BBG006L8G4H1", MarketScenario::realistic(3500.0));
 
             // LKOH - с задержкой (для теста order.cancelled)
             instruments_["BBG004731032"] = {"BBG004731032", "LKOH", "Лукойл", "RUB", 1, 0.5};
             priceSimulator_->initInstrument("BBG004731032", 7200.0, 0.001, 0.002);
             ticker_->addInstrument("BBG004731032");
-            setScenario("BBG004731032", MarketScenario::delayed(7200.0, std::chrono::milliseconds{10000}));
+            setScenario("BBG004731032", MarketScenario::delayed(7200.0, std::chrono::milliseconds{5000}));
 
             // MGNT - частичное исполнение (50%)
             instruments_["BBG004RVFCY3"] = {"BBG004RVFCY3", "MGNT", "Магнит", "RUB", 1, 0.5};

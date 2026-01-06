@@ -136,7 +136,7 @@
         </div>
     </div>
     <script>
-        var CONFIG = { AUTH_URL: '/auth', TRADING_URL: '/trading', POLL_INTERVAL: 5000 };
+        var CONFIG = { AUTH_URL: '/auth', TRADING_URL: '/trading', POLL_INTERVAL: 2000 };
         var state = { 
             sessionToken: localStorage.getItem('sessionToken'), 
             accessToken: null, 
@@ -309,7 +309,7 @@
                 html += 'Bid: <span class="price price-green">'+formatPrice(q.bid_price)+'</span> | ';
                 html += 'Ask: <span class="price price-red">'+formatPrice(q.ask_price)+'</span> | ';
                 html += 'Last: <span class="price">'+formatPrice(q.last_price)+'</span>';
-                html += '<div class="hint" style="margin-top:5px;">SBER: instant • GAZP: reject • YNDX: 3s pending • LKOH: 10s pending • MGNT: partial 50%</div>';
+                html += '<div class="hint" style="margin-top:5px;">SBER: instant • GAZP: reject • YNDX: realistic • LKOH: 5s pending • MGNT: partial 50%</div>';
             } else {
                 html += '<span style="color:#999;">Котировки загружаются...</span>';
             }
