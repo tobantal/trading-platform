@@ -8,7 +8,7 @@ using namespace broker::adapters::secondary;
 
 class PriceSimulatorTest : public ::testing::Test {
 protected:
-    // Ð˜ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÐ¼ Ñ„Ð¸ÐºÑÐ¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ñ‹Ð¹ seed Ð´Ð»Ñ Ð´ÐµÑ‚ÐµÑ€Ð¼Ð¸Ð½Ð¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ñ‹Ñ… Ñ‚ÐµÑÑ‚Ð¾Ð²
+    // Используем фиксированный seed для детерминированных тестов
     PriceSimulator simulator{42};
     
     const std::string SBER_FIGI = "BBG004730N88";
@@ -36,7 +36,7 @@ TEST_F(PriceSimulatorTest, InitInstrument_DefaultSpreadAndVolatility) {
     auto quote = simulator.getQuote(SBER_FIGI);
     ASSERT_TRUE(quote.has_value());
     
-    // Ð¡Ð¿Ñ€ÐµÐ´ Ð¿Ð¾ ÑƒÐ¼Ð¾Ð»Ñ‡Ð°Ð½Ð¸ÑŽ 0.1%
+    // Спред по умолчанию 0.1%
     double expectedSpread = 280.0 * 0.001;
     EXPECT_NEAR(quote->spreadAbs(), expectedSpread, 0.01);
 }
@@ -59,12 +59,12 @@ TEST_F(PriceSimulatorTest, HasInstrument_NotFound) {
 // ================================================================
 
 TEST_F(PriceSimulatorTest, GetQuote_BidAskSpread) {
-    simulator.initInstrument(SBER_FIGI, 280.0, 0.01, 0.002);  // 1% ÑÐ¿Ñ€ÐµÐ´
+    simulator.initInstrument(SBER_FIGI, 280.0, 0.01, 0.002);  // 1% спред
     
     auto quote = simulator.getQuote(SBER_FIGI);
     ASSERT_TRUE(quote.has_value());
     
-    // ÐŸÑ€Ð¸ Ñ†ÐµÐ½Ðµ 280 Ð¸ ÑÐ¿Ñ€ÐµÐ´Ðµ 1%:
+    // При цене 280 и спреде 1%:
     // bid = 280 * (1 - 0.005) = 278.6
     // ask = 280 * (1 + 0.005) = 281.4
     EXPECT_NEAR(quote->bid, 278.6, 0.1);
@@ -82,7 +82,7 @@ TEST_F(PriceSimulatorTest, GetQuote_MidPrice) {
 }
 
 TEST_F(PriceSimulatorTest, GetQuote_SpreadPercent) {
-    simulator.initInstrument(SBER_FIGI, 280.0, 0.01, 0.002);  // 1% ÑÐ¿Ñ€ÐµÐ´
+    simulator.initInstrument(SBER_FIGI, 280.0, 0.01, 0.002);  // 1% спред
     
     auto quote = simulator.getQuote(SBER_FIGI);
     ASSERT_TRUE(quote.has_value());
@@ -123,9 +123,9 @@ TEST_F(PriceSimulatorTest, SetPrice_Success) {
 TEST_F(PriceSimulatorTest, SetPrice_MinimumPrice) {
     simulator.initInstrument(SBER_FIGI, 280.0);
     
-    simulator.setPrice(SBER_FIGI, -10.0);  // ÐŸÐ¾Ð¿Ñ‹Ñ‚ÐºÐ° ÑƒÑÑ‚Ð°Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ Ð¾Ñ‚Ñ€Ð¸Ñ†Ð°Ñ‚ÐµÐ»ÑŒÐ½ÑƒÑŽ Ñ†ÐµÐ½Ñƒ
+    simulator.setPrice(SBER_FIGI, -10.0);  // Попытка установить отрицательную цену
     
-    EXPECT_DOUBLE_EQ(simulator.getPrice(SBER_FIGI), 0.01);  // ÐœÐ¸Ð½Ð¸Ð¼ÑƒÐ¼ 1 ÐºÐ¾Ð¿ÐµÐ¹ÐºÐ°
+    EXPECT_DOUBLE_EQ(simulator.getPrice(SBER_FIGI), 0.01);  // Минимум 1 копейка
 }
 
 TEST_F(PriceSimulatorTest, SetPrice_NotFound) {
@@ -155,7 +155,7 @@ TEST_F(PriceSimulatorTest, MovePrice_NotBelowMinimum) {
     
     double newPrice = simulator.movePrice(SBER_FIGI, -100.0);
     
-    EXPECT_DOUBLE_EQ(newPrice, 0.01);  // ÐœÐ¸Ð½Ð¸Ð¼ÑƒÐ¼
+    EXPECT_DOUBLE_EQ(newPrice, 0.01);  // Минимум
 }
 
 TEST_F(PriceSimulatorTest, MovePrice_NotFound) {
@@ -184,11 +184,11 @@ TEST_F(PriceSimulatorTest, MovePricePercent_Negative) {
 // ================================================================
 
 TEST_F(PriceSimulatorTest, Tick_ChangesPrice) {
-    simulator.initInstrument(SBER_FIGI, 280.0, 0.001, 0.1);  // Ð’Ñ‹ÑÐ¾ÐºÐ°Ñ Ð²Ð¾Ð»Ð°Ñ‚Ð¸Ð»ÑŒÐ½Ð¾ÑÑ‚ÑŒ
+    simulator.initInstrument(SBER_FIGI, 280.0, 0.001, 0.1);  // Высокая волатильность
     
     double originalPrice = simulator.getPrice(SBER_FIGI);
     
-    // ÐŸÐ¾ÑÐ»Ðµ Ð¼Ð½Ð¾Ð¶ÐµÑÑ‚Ð²Ð° Ñ‚Ð¸ÐºÐ¾Ð² Ñ†ÐµÐ½Ð° Ð´Ð¾Ð»Ð¶Ð½Ð° Ð¸Ð·Ð¼ÐµÐ½Ð¸Ñ‚ÑŒÑÑ
+    // После множества тиков цена должна измениться
     for (int i = 0; i < 100; ++i) {
         simulator.tick(SBER_FIGI);
     }
@@ -203,7 +203,7 @@ TEST_F(PriceSimulatorTest, Tick_NotFound) {
 }
 
 TEST_F(PriceSimulatorTest, Tick_NeverNegative) {
-    simulator.initInstrument(SBER_FIGI, 1.0, 0.001, 0.5);  // ÐžÑ‡ÐµÐ½ÑŒ Ð²Ñ‹ÑÐ¾ÐºÐ°Ñ Ð²Ð¾Ð»Ð°Ñ‚Ð¸Ð»ÑŒÐ½Ð¾ÑÑ‚ÑŒ
+    simulator.initInstrument(SBER_FIGI, 1.0, 0.001, 0.5);  // Очень высокая волатильность
     
     for (int i = 0; i < 1000; ++i) {
         double price = simulator.tick(SBER_FIGI);
@@ -221,8 +221,8 @@ TEST_F(PriceSimulatorTest, Simulate_MultipleTicksAtOnce) {
 }
 
 TEST_F(PriceSimulatorTest, Tick_StatisticalProperties) {
-    // ÐŸÑ€Ð¸ Ð½ÑƒÐ»ÐµÐ²Ð¾Ð¼ drift, ÑÑ€ÐµÐ´Ð½ÐµÐµ Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ðµ Ð´Ð¾Ð»Ð¶Ð½Ð¾ Ð±Ñ‹Ñ‚ÑŒ Ð¾ÐºÐ¾Ð»Ð¾ 0
-    PriceSimulator sim(12345);  // Ð¤Ð¸ÐºÑÐ¸Ñ€Ð¾Ð²Ð°Ð½Ð½Ñ‹Ð¹ seed
+    // При нулевом drift, среднее изменение должно быть около 0
+    PriceSimulator sim(12345);  // Фиксированный seed
     sim.initInstrument(SBER_FIGI, 100.0, 0.0, 0.01);
     
     double sumReturns = 0.0;
@@ -237,7 +237,7 @@ TEST_F(PriceSimulatorTest, Tick_StatisticalProperties) {
     }
     
     double meanReturn = sumReturns / N;
-    EXPECT_NEAR(meanReturn, 0.0, 0.001);  // Ð¡Ñ€ÐµÐ´Ð½ÑÑ Ð´Ð¾Ñ…Ð¾Ð´Ð½Ð¾ÑÑ‚ÑŒ Ð¾ÐºÐ¾Ð»Ð¾ 0
+    EXPECT_NEAR(meanReturn, 0.0, 0.001);  // Средняя доходность около 0
 }
 
 // ================================================================
@@ -322,7 +322,7 @@ TEST_F(PriceSimulatorTest, ThreadSafety_ConcurrentTicks) {
         t.join();
     }
     
-    // Ð¦ÐµÐ½Ð° Ð´Ð¾Ð»Ð¶Ð½Ð° Ð±Ñ‹Ñ‚ÑŒ Ð²Ð°Ð»Ð¸Ð´Ð½Ð¾Ð¹
+    // Цена должна быть валидной
     double price = simulator.getPrice(SBER_FIGI);
     EXPECT_GT(price, 0.0);
 }
@@ -380,4 +380,3 @@ TEST_F(PriceSimulatorTest, DeterministicSeed_SameResults) {
         EXPECT_DOUBLE_EQ(price1, price2);
     }
 }
-

@@ -7,18 +7,18 @@
 namespace broker::domain {
 
 /**
- * @brief Ð”ÐµÐ½ÐµÐ¶Ð½Ð°Ñ ÑÑƒÐ¼Ð¼Ð° (ÐºÐ°Ðº Ð² Tinkoff Invest API)
+ * @brief Денежная сумма (как в Tinkoff Invest API)
  * 
- * Ð˜ÑÐ¿Ð¾Ð»ÑŒÐ·ÑƒÐµÑ‚ Ñ†ÐµÐ»Ð¾Ñ‡Ð¸ÑÐ»ÐµÐ½Ð½Ð¾Ðµ Ð¿Ñ€ÐµÐ´ÑÑ‚Ð°Ð²Ð»ÐµÐ½Ð¸Ðµ Ð´Ð»Ñ Ñ‚Ð¾Ñ‡Ð½Ñ‹Ñ… Ð²Ñ‹Ñ‡Ð¸ÑÐ»ÐµÐ½Ð¸Ð¹:
- * - units: Ñ†ÐµÐ»Ð°Ñ Ñ‡Ð°ÑÑ‚ÑŒ
- * - nano: Ð´Ñ€Ð¾Ð±Ð½Ð°Ñ Ñ‡Ð°ÑÑ‚ÑŒ (10^-9)
+ * Использует целочисленное представление для точных вычислений:
+ * - units: целая часть
+ * - nano: дробная часть (10^-9)
  * 
- * ÐŸÑ€Ð¸Ð¼ÐµÑ€: 265.50 RUB = {units: 265, nano: 500000000, currency: "RUB"}
+ * Пример: 265.50 RUB = {units: 265, nano: 500000000, currency: "RUB"}
  */
 struct Money {
-    int64_t units = 0;          ///< Ð¦ÐµÐ»Ð°Ñ Ñ‡Ð°ÑÑ‚ÑŒ ÑÑƒÐ¼Ð¼Ñ‹
-    int32_t nano = 0;           ///< Ð”Ñ€Ð¾Ð±Ð½Ð°Ñ Ñ‡Ð°ÑÑ‚ÑŒ (Ð½Ð°Ð½Ð¾ÑÐµÐºÑƒÐ½Ð´Ñ‹, 10^-9)
-    std::string currency = "RUB"; ///< ÐšÐ¾Ð´ Ð²Ð°Ð»ÑŽÑ‚Ñ‹ (ISO 4217)
+    int64_t units = 0;          ///< Целая часть суммы
+    int32_t nano = 0;           ///< Дробная часть (наносекунды, 10^-9)
+    std::string currency = "RUB"; ///< Код валюты (ISO 4217)
 
     Money() = default;
     
@@ -26,14 +26,14 @@ struct Money {
         : units(u), nano(n), currency(curr) {}
 
     /**
-     * @brief ÐŸÑ€ÐµÐ¾Ð±Ñ€Ð°Ð·Ð¾Ð²Ð°Ñ‚ÑŒ Ð² double
+     * @brief Преобразовать в double
      */
     double toDouble() const {
         return static_cast<double>(units) + static_cast<double>(nano) / 1e9;
     }
 
     /**
-     * @brief Ð¡Ð¾Ð·Ð´Ð°Ñ‚ÑŒ Money Ð¸Ð· double
+     * @brief Создать Money из double
      */
     static Money fromDouble(double value, const std::string& curr = "RUB") {
         Money m;
@@ -44,7 +44,7 @@ struct Money {
     }
 
     /**
-     * @brief Ð¡Ð»Ð¾Ð¶ÐµÐ½Ð¸Ðµ
+     * @brief Сложение
      */
     Money operator+(const Money& other) const {
         Money result;
@@ -54,7 +54,7 @@ struct Money {
         result.units = units + other.units + totalNano / 1000000000;
         result.nano = static_cast<int32_t>(totalNano % 1000000000);
         
-        // ÐžÐ±Ñ€Ð°Ð±Ð¾Ñ‚ÐºÐ° Ð¾Ñ‚Ñ€Ð¸Ñ†Ð°Ñ‚ÐµÐ»ÑŒÐ½Ñ‹Ñ… Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ð¹
+        // Обработка отрицательных значений
         if (result.nano < 0) {
             result.units -= 1;
             result.nano += 1000000000;
@@ -64,7 +64,7 @@ struct Money {
     }
 
     /**
-     * @brief Ð’Ñ‹Ñ‡Ð¸Ñ‚Ð°Ð½Ð¸Ðµ
+     * @brief Вычитание
      */
     Money operator-(const Money& other) const {
         Money negOther = other;
@@ -74,7 +74,7 @@ struct Money {
     }
 
     /**
-     * @brief Ð£Ð¼Ð½Ð¾Ð¶ÐµÐ½Ð¸Ðµ Ð½Ð° ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾
+     * @brief Умножение на количество
      */
     Money operator*(int64_t qty) const {
         double val = toDouble() * qty;
@@ -82,7 +82,7 @@ struct Money {
     }
 
     /**
-     * @brief Ð¡Ñ€Ð°Ð²Ð½ÐµÐ½Ð¸Ðµ
+     * @brief Сравнение
      */
     bool operator==(const Money& other) const {
         return units == other.units && nano == other.nano && currency == other.currency;
@@ -110,14 +110,14 @@ struct Money {
     }
 
     /**
-     * @brief ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð½Ð° Ð½Ð¾Ð»ÑŒ
+     * @brief Проверка на ноль
      */
     bool isZero() const {
         return units == 0 && nano == 0;
     }
 
     /**
-     * @brief ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð½Ð° Ð¾Ñ‚Ñ€Ð¸Ñ†Ð°Ñ‚ÐµÐ»ÑŒÐ½Ð¾Ðµ Ð·Ð½Ð°Ñ‡ÐµÐ½Ð¸Ðµ
+     * @brief Проверка на отрицательное значение
      */
     bool isNegative() const {
         return units < 0 || (units == 0 && nano < 0);

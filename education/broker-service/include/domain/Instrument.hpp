@@ -7,16 +7,16 @@
 namespace broker::domain {
 
 /**
- * @brief Ð˜Ð½Ñ„Ð¾Ñ€Ð¼Ð°Ñ†Ð¸Ñ Ð¾Ð± Ð¸Ð½ÑÑ‚Ñ€ÑƒÐ¼ÐµÐ½Ñ‚Ðµ
+ * @brief Информация об инструменте
  */
 struct Instrument {
     std::string figi;           ///< FIGI
-    std::string ticker;         ///< Ð¢Ð¸ÐºÐµÑ€
-    std::string name;           ///< ÐŸÐ¾Ð»Ð½Ð¾Ðµ Ð½Ð°Ð·Ð²Ð°Ð½Ð¸Ðµ
-    std::string currency;       ///< Ð’Ð°Ð»ÑŽÑ‚Ð° Ñ‚Ð¾Ñ€Ð³Ð¾Ð²
-    int64_t lot = 1;            ///< Ð Ð°Ð·Ð¼ÐµÑ€ Ð»Ð¾Ñ‚Ð°
-    Money minPriceIncrement;    ///< ÐœÐ¸Ð½Ð¸Ð¼Ð°Ð»ÑŒÐ½Ñ‹Ð¹ ÑˆÐ°Ð³ Ñ†ÐµÐ½Ñ‹
-    bool tradingAvailable = true; ///< Ð”Ð¾ÑÑ‚ÑƒÐ¿ÐµÐ½ Ð´Ð»Ñ Ñ‚Ð¾Ñ€Ð³Ð¾Ð²
+    std::string ticker;         ///< Тикер
+    std::string name;           ///< Полное название
+    std::string currency;       ///< Валюта торгов
+    int64_t lot = 1;            ///< Размер лота
+    Money minPriceIncrement;    ///< Минимальный шаг цены
+    bool tradingAvailable = true; ///< Доступен для торгов
 
     Instrument() = default;
 
