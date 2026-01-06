@@ -11,20 +11,6 @@
 
 ---
 
-### Доступ к сервисам
-
-| Сервис | URL |
-|--------|-----|
-| Trading UI | http://arch.homework/ui |
-| Auth API | http://arch.homework/auth |
-| Trading API | http://arch.homework/trading |
-| Broker API | http://arch.homework/broker |
-| RabbitMQ UI | http://arch.homework/rabbitmq |
-| Prometheus | http://arch.homework/prometheus |
-| Grafana | http://arch.homework/grafana |
-
----
-
 ## 🏗 Архитектура
 
 ### Общая схема
@@ -1242,7 +1228,7 @@ make test-trading
 
 ----
 
-## 🚀 Быстрый старт (для проверяющего)
+## 🚀 Быстрый старт
 
 ### Требования
 
@@ -1277,6 +1263,20 @@ curl http://arch.homework/broker/health
 # 5. UI проекта
 open http://arch.homework/ui
 ```
+
+### Доступ к сервисам
+
+| Сервис | URL |
+|--------|-----|
+| Trading UI | http://arch.homework/ui |
+| Auth API | http://arch.homework/auth |
+| Trading API | http://arch.homework/trading |
+| Broker API | http://arch.homework/broker |
+| RabbitMQ UI | http://arch.homework/rabbitmq |
+| Prometheus | http://arch.homework/prometheus |
+| Grafana | http://arch.homework/grafana |
+
+---
 
 ### Запуск E2E тестов
 
