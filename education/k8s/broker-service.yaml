@@ -85,8 +85,9 @@ spec:
               value: "REALISTIC"
             - name: BROKER_SLIPPAGE
               value: "0.001"
+              # с какой частотой брокер будет генерировать сигналы
             - name: BROKER_TICK_INTERVAL_MS
-              value: "100"
+              value: "2000"
           readinessProbe:
             httpGet:
               path: /health

@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Platform</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            margin: 0; padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white; border-radius: 8px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 30px; max-width: 1400px; margin: 0 auto;
+        }
+        .page { display: none; }
+        .page.active { display: block; }
+        h1 { margin: 0 0 10px 0; color: #333; }
+        h2 { color: #333; margin: 20px 0 10px 0; border-bottom: 2px solid #667eea; padding-bottom: 5px; }
+        h3 { color: #555; margin: 15px 0 10px 0; }
+        .form-group { margin: 15px 0; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: 500; color: #333; }
+        .form-group input, .form-group select {
+            width: 100%; padding: 10px; border: 1px solid #ddd;
+            border-radius: 4px; font-size: 14px;
+        }
+        button {
+            background: #667eea; color: white; border: none;
+            padding: 10px 20px; border-radius: 4px; cursor: pointer;
+            font-size: 14px; margin-right: 10px; margin-bottom: 10px;
+        }
+        button:hover { background: #764ba2; }
+        button.secondary { background: #95a5a6; }
+        button.danger { background: #e74c3c; }
+        button.success { background: #27ae60; }
+        .card { background: #f8f9fa; border-radius: 4px; padding: 15px; margin: 10px 0; border-left: 4px solid #667eea; }
+        .card.clickable { cursor: pointer; }
+        .card.clickable:hover { background: #f0f7ff; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+        th, td { padding: 8px 6px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #667eea; color: white; white-space: nowrap; }
+        .grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; }
+        @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+        .status { padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 11px; font-weight: bold; }
+        .badge.filled { background: #27ae60; color: white; }
+        .badge.pending { background: #f39c12; color: white; }
+        .badge.rejected { background: #e74c3c; color: white; }
+        .badge.cancelled { background: #95a5a6; color: white; }
+        .header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+        .user-info { font-size: 14px; color: #666; }
+        .refresh-indicator { position: fixed; top: 10px; right: 10px; background: rgba(102, 126, 234, 0.9); color: white; padding: 5px 10px; border-radius: 4px; font-size: 12px; display: none; }
+        .refresh-indicator.active { display: block; }
+        .empty-state { text-align: center; padding: 30px; color: #999; }
+        #orderForm { background: #f0f7ff; padding: 15px; border-radius: 4px; margin: 15px 0; }
+        #orderForm .form-row { display: flex; gap: 10px; flex-wrap: wrap; }
+        #orderForm .form-row > * { flex: 1; min-width: 120px; }
+        .price { font-family: monospace; }
+        .price-green { color: #27ae60; }
+        .price-red { color: #e74c3c; }
+    </style>
+</head>
+<body>
+    <div class="refresh-indicator" id="refreshIndicator">Обновление...</div>
+    <div class="container">
+        <!-- LOGIN -->
+        <div id="loginPage" class="page active">
+            <h1>Trading Platform</h1>
+            <p>C++17, Boost.Beast, RabbitMQ</p>
+            <div id="loginStatus"></div>
+            <div class="form-group"><label>Username</label><input type="text" id="loginUsername" placeholder="username"></div>
+            <div class="form-group"><label>Password</label><input type="password" id="loginPassword" placeholder="password"></div>
+            <button onclick="login()">Войти</button>
+            <button class="secondary" onclick="showPage('registerPage')">Регистрация</button>
+        </div>
+        <!-- REGISTER -->
+        <div id="registerPage" class="page">
+            <h1>Регистрация</h1>
+            <div id="registerStatus"></div>
+            <div class="form-group"><label>Username</label><input type="text" id="regUsername" placeholder="username"></div>
+            <div class="form-group"><label>Email</label><input type="email" id="regEmail" placeholder="user@example.com"></div>
+            <div class="form-group"><label>Password</label><input type="password" id="regPassword" placeholder="password"></div>
+            <div class="form-group"><label>Confirm Password</label><input type="password" id="regPasswordConfirm" placeholder="password"></div>
+            <button onclick="register()">Зарегистрироваться</button>
+            <button class="secondary" onclick="showPage('loginPage')">Назад</button>
+        </div>
+        <!-- ACCOUNTS -->
+        <div id="accountsPage" class="page">
+            <div class="header"><h1>Мои аккаунты</h1><div class="user-info"><span id="currentUser"></span> <button class="secondary" onclick="logout()">Выйти</button></div></div>
+            <div id="accountsStatus"></div>
+            <button class="success" onclick="createSandboxAccount()">+ Создать Sandbox</button>
+            <div id="accountsList"></div>
+        </div>
+        <!-- TRADING -->
+        <div id="tradingPage" class="page">
+            <div class="header"><h1>Торговля</h1><div class="user-info"><span id="currentAccount"></span> <button class="secondary" onclick="backToAccounts()">Аккаунты</button> <button class="secondary" onclick="logout()">Выйти</button></div></div>
+            <div id="tradingStatus"></div>
+            <div class="grid">
+                <div>
+                    <h2>Портфель</h2>
+                    <div class="card"><h3>Баланс</h3><div id="balanceInfo" class="price" style="font-size:18px;">...</div></div>
+                    <h3>Позиции</h3><div id="positionsTable"></div>
+                    <h2>Ордера</h2>
+                    <div id="orderForm">
+                        <h3>Новый ордер</h3>
+                        <div class="form-row">
+                            <div class="form-group"><label>Инструмент</label><select id="orderFigi"></select></div>
+                            <div class="form-group"><label>Направление</label><select id="orderDirection"><option value="BUY">BUY</option><option value="SELL">SELL</option></select></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Кол-во лотов</label><input type="number" id="orderQuantity" value="1" min="1"></div>
+                            <div class="form-group"><label>Тип</label><select id="orderType"><option value="MARKET">MARKET</option><option value="LIMIT">LIMIT</option></select></div>
+                            <div class="form-group" id="priceGroup" style="display:none"><label>Цена</label><input type="number" id="orderPrice" value="0" step="0.01"></div>
+                        </div>
+                        <div id="selectedInstrumentPrice" class="card" style="margin-top:10px;padding:10px;"></div>
+                        <button class="success" onclick="createOrder()">Создать ордер</button>
+                    </div>
+                    <h3>История ордеров</h3><div id="ordersTable"></div>
+                </div>
+                <div><h2>Инструменты и котировки</h2><div id="instrumentsTable"></div></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        var CONFIG = { AUTH_URL: '/auth', TRADING_URL: '/trading', POLL_INTERVAL: 5000 };
+        var state = { 
+            sessionToken: localStorage.getItem('sessionToken'), 
+            accessToken: null, 
+            currentUsername: localStorage.getItem('currentUsername'),
+            currentAccountId: localStorage.getItem('currentAccountId'),
+            selectedFigi: localStorage.getItem('selectedFigi'),
+            instruments: [], 
+            quotes: {},
+            pollTimer: null 
+        };
+        
+        function showPage(id) { document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');}); document.getElementById(id).classList.add('active'); }
+        function showStatus(id, msg, type) { document.getElementById(id).innerHTML = '<div class="status '+(type||'info')+'">'+msg+'</div>'; if(type==='success') setTimeout(function(){document.getElementById(id).innerHTML='';},3000); }
+        function showRefresh(s) { document.getElementById('refreshIndicator').classList.toggle('active',s); }
+        
+        function formatMoney(m) { 
+            if(!m) return '0.00 RUB';
+            if(typeof m === 'number') return m.toFixed(2) + ' RUB';
+            if(m.amount !== undefined) return (m.amount/100).toFixed(2) + ' ' + (m.currency||'RUB');
+            var units = m.units || 0;
+            var nano = m.nano || 0;
+            return (units + nano/1e9).toFixed(2) + ' ' + (m.currency||'RUB'); 
+        }
+        
+        function formatPrice(p) { 
+            if(p === null || p === undefined) return '-'; 
+            if(typeof p === 'number') return p.toFixed(2);
+            if(p.amount !== undefined) return (p.amount/100).toFixed(2);
+            var units = p.units || 0;
+            var nano = p.nano || 0;
+            return (units + nano/1e9).toFixed(2); 
+        }
+        
+        function badge(s) { return '<span class="badge '+((s||'').toLowerCase())+'">'+s+'</span>'; }
+        
+        function api(url, opt) {
+            opt = opt || {};
+            return fetch(url, { method: opt.method || 'GET', headers: Object.assign({'Content-Type':'application/json'}, opt.headers||{}), body: opt.body })
+            .then(function(r) { return r.text().then(function(t) { var d; try{d=JSON.parse(t);}catch(e){d={message:t};} if(!r.ok) throw new Error(d.error||d.message||'HTTP '+r.status); return d; }); });
+        }
+        
+        function login() {
+            var u = document.getElementById('loginUsername').value, p = document.getElementById('loginPassword').value;
+            if(!u||!p) { showStatus('loginStatus','Введите username и пароль','error'); return; }
+            api(CONFIG.AUTH_URL+'/api/v1/auth/login', { method:'POST', body:JSON.stringify({username:u,password:p}) })
+            .then(function(d) { state.sessionToken = d.session_token; state.currentUsername = u; localStorage.setItem('sessionToken', d.session_token); localStorage.setItem('currentUsername', u); loadAccounts(); })
+            .catch(function(e) { showStatus('loginStatus','Ошибка: '+e.message,'error'); });
+        }
+        
+        function register() {
+            var u = document.getElementById('regUsername').value, e = document.getElementById('regEmail').value, p = document.getElementById('regPassword').value, c = document.getElementById('regPasswordConfirm').value;
+            if(!u||!e||!p) { showStatus('registerStatus','Заполните все поля','error'); return; }
+            if(p!==c) { showStatus('registerStatus','Пароли не совпадают','error'); return; }
+            api(CONFIG.AUTH_URL+'/api/v1/auth/register', { method:'POST', body:JSON.stringify({username:u,email:e,password:p}) })
+            .then(function(d) { showStatus('registerStatus','Успех!','success'); document.getElementById('loginUsername').value = u; document.getElementById('loginPassword').value = p; setTimeout(function(){showPage('loginPage');login();},1000); })
+            .catch(function(e) { showStatus('registerStatus','Ошибка: '+e.message,'error'); });
+        }
+        
+        function logout() { 
+            state.sessionToken = null; state.accessToken = null; 
+            localStorage.removeItem('sessionToken'); localStorage.removeItem('currentUsername'); 
+            localStorage.removeItem('currentAccountId');
+            stopPolling(); showPage('loginPage'); 
+        }
+        
+        function loadAccounts() {
+            api(CONFIG.AUTH_URL+'/api/v1/accounts', { headers:{'Authorization':'Bearer '+state.sessionToken} })
+            .then(function(d) { document.getElementById('currentUser').textContent = state.currentUsername; var acc = d.accounts || [];
+                document.getElementById('accountsList').innerHTML = acc.length===0 ? '<div class="empty-state">Нет аккаунтов. Создайте Sandbox!</div>' : acc.map(function(a){ 
+                    return '<div class="card clickable" onclick="selectAccount(\''+a.account_id+'\')"><strong>'+a.account_id+'</strong><div style="font-size:12px;color:#666;">'+a.name+'</div></div>'; 
+                }).join('');
+                showPage('accountsPage'); })
+            .catch(function(e) { showStatus('loginStatus','Ошибка: '+e.message,'error'); });
+        }
+        
+        function createSandboxAccount() {
+            var name = prompt('Название аккаунта:', 'Sandbox-' + Date.now());
+            if(!name) return;
+            api(CONFIG.AUTH_URL+'/api/v1/accounts', { method:'POST', headers:{'Authorization':'Bearer '+state.sessionToken}, body:JSON.stringify({name:name, type:'SANDBOX'}) })
+            .then(function(d) { showStatus('accountsStatus','Аккаунт создан! ID: '+d.account_id,'success'); loadAccounts(); })
+            .catch(function(e) { showStatus('accountsStatus','Ошибка: '+e.message,'error'); });
+        }
+        
+        function selectAccount(id) {
+            state.currentAccountId = id;
+            localStorage.setItem('currentAccountId', id);
+            api(CONFIG.AUTH_URL+'/api/v1/auth/access-token', { method:'POST', headers:{'Authorization':'Bearer '+state.sessionToken}, body:JSON.stringify({account_id:id}) })
+            .then(function(d) { state.accessToken = d.access_token; document.getElementById('currentAccount').textContent = id; showPage('tradingPage'); loadInstruments(); startPolling(); })
+            .catch(function(e) { showStatus('accountsStatus','Ошибка: '+e.message,'error'); });
+        }
+        
+        function backToAccounts() { stopPolling(); loadAccounts(); }
+        
+        function loadInstruments() {
+            api(CONFIG.TRADING_URL+'/api/v1/instruments', { headers:{'Authorization':'Bearer '+state.accessToken} })
+            .then(function(d) { 
+                state.instruments = d.instruments || d || [];
+                var select = document.getElementById('orderFigi');
+                select.innerHTML = state.instruments.map(function(i){ return '<option value="'+i.figi+'">'+i.ticker+' - '+i.name+'</option>'; }).join('');
+                if(state.selectedFigi) { select.value = state.selectedFigi; }
+                loadQuotes();
+            }).catch(function(e){console.error('loadInstruments:',e);});
+        }
+        
+        function loadQuotes() {
+            if(state.instruments.length === 0) { renderInstruments(); return; }
+            // API: /api/v1/quotes?figis=XXX,YYY,ZZZ
+            var figis = state.instruments.map(function(i){ return i.figi; }).join(',');
+            api(CONFIG.TRADING_URL+'/api/v1/quotes?figis='+figis, { headers:{'Authorization':'Bearer '+state.accessToken} })
+            .then(function(d) { 
+                var quotes = d.quotes || [];
+                quotes.forEach(function(q) {
+                    state.quotes[q.figi] = q;
+                });
+                renderInstruments(); 
+                updateSelectedInstrumentPrice();
+            })
+            .catch(function(e) { 
+                console.error('loadQuotes:', e.message);
+                renderInstruments();
+            });
+        }
+        
+        function renderInstruments() {
+            var h = '<table><tr><th>Ticker</th><th>Name</th><th>Bid</th><th>Ask</th><th>Last</th></tr>';
+            state.instruments.forEach(function(i) { 
+                var q = state.quotes[i.figi] || {};
+                h+='<tr><td><strong>'+i.ticker+'</strong></td><td style="font-size:11px;">'+i.name+'</td>';
+                h+='<td class="price price-green">'+(q.bid_price ? formatPrice(q.bid_price) : '-')+'</td>';
+                h+='<td class="price price-red">'+(q.ask_price ? formatPrice(q.ask_price) : '-')+'</td>';
+                h+='<td class="price">'+(q.last_price ? formatPrice(q.last_price) : '-')+'</td></tr>'; 
+            });
+            document.getElementById('instrumentsTable').innerHTML = h+'</table>';
+        }
+        
+        function updateSelectedInstrumentPrice() {
+            var figi = document.getElementById('orderFigi').value;
+            var q = state.quotes[figi];
+            var instr = state.instruments.find(function(i){return i.figi===figi;});
+            var html = '<strong>'+(instr?instr.ticker+' ('+instr.name+')':'')+'</strong><br>';
+            if(q) {
+                html += 'Bid: <span class="price price-green">'+formatPrice(q.bid_price)+'</span> | ';
+                html += 'Ask: <span class="price price-red">'+formatPrice(q.ask_price)+'</span> | ';
+                html += 'Last: <span class="price">'+formatPrice(q.last_price)+'</span>';
+                html += '<div style="font-size:11px;color:#666;margin-top:5px;">YNDX: PENDING ~3сек (можно отменить). GAZP: always reject.</div>';
+            } else {
+                html += '<span style="color:#999;">Котировки загружаются...</span>';
+            }
+            document.getElementById('selectedInstrumentPrice').innerHTML = html;
+        }
+        
+        function loadPortfolio() {
+            api(CONFIG.TRADING_URL+'/api/v1/portfolio', { headers:{'Authorization':'Bearer '+state.accessToken} })
+            .then(function(d) { 
+                document.getElementById('balanceInfo').innerHTML = formatMoney(d.cash||d.balance||{});
+                var pos = d.positions || [];
+                if(pos.length===0) { document.getElementById('positionsTable').innerHTML = '<div class="empty-state">Нет позиций</div>'; }
+                else { var h='<table><tr><th>Ticker</th><th>Qty</th><th>Avg</th></tr>'; 
+                    pos.forEach(function(p){
+                        var instr = state.instruments.find(function(i){return i.figi===p.figi;});
+                        var ticker = instr ? instr.ticker : p.figi.substring(0,8);
+                        h+='<tr><td>'+ticker+'</td><td>'+(p.quantity||p.lots)+'</td><td class="price">'+formatPrice(p.average_price)+'</td></tr>';
+                    }); 
+                    document.getElementById('positionsTable').innerHTML = h+'</table>'; 
+                }
+            }).catch(function(e){console.error('loadPortfolio:',e);});
+        }
+        
+        function loadOrders() {
+            api(CONFIG.TRADING_URL+'/api/v1/orders', { headers:{'Authorization':'Bearer '+state.accessToken} })
+            .then(function(d) { var orders = d.orders || d || [];
+                if(orders.length===0) { document.getElementById('ordersTable').innerHTML = '<div class="empty-state">Нет ордеров</div>'; }
+                else { var h='<table><tr><th>ID</th><th>Ticker</th><th>Dir</th><th>Qty</th><th>Price</th><th>Status</th><th></th></tr>';
+                    orders.slice(0,30).forEach(function(o){ 
+                        var instr = state.instruments.find(function(i){return i.figi===o.figi;});
+                        var ticker = instr ? instr.ticker : o.figi.substring(0,6);
+                        h+='<tr><td><code style="font-size:10px;">'+(o.order_id||'').substring(0,10)+'</code></td>';
+                        h+='<td>'+ticker+'</td><td>'+o.direction+'</td><td>'+o.quantity+'</td>';
+                        h+='<td class="price">'+formatPrice(o.price)+'</td>';
+                        h+='<td>'+badge(o.status)+'</td>';
+                        h+='<td>'+(o.status==='PENDING'?'<button class="danger" style="padding:5px 10px;" onclick="cancelOrder(\''+o.order_id+'\')">X</button>':'')+'</td></tr>'; 
+                    });
+                    document.getElementById('ordersTable').innerHTML = h+'</table>'; }
+            }).catch(function(e){console.error('loadOrders:',e);});
+        }
+        
+        function createOrder() {
+            var figi = document.getElementById('orderFigi').value, dir = document.getElementById('orderDirection').value, qty = parseInt(document.getElementById('orderQuantity').value), type = document.getElementById('orderType').value, price = parseFloat(document.getElementById('orderPrice').value);
+            if(!figi||qty<=0) { showStatus('tradingStatus','Выберите инструмент','error'); return; }
+            var data = {figi:figi, direction:dir, quantity:qty, type:type}; if(type==='LIMIT'&&price>0) data.price = price;
+            api(CONFIG.TRADING_URL+'/api/v1/orders', { method:'POST', headers:{'Authorization':'Bearer '+state.accessToken}, body:JSON.stringify(data) })
+            .then(function(d) { 
+                var msg = 'Status: '+d.status;
+                if(d.executed_price) msg += ', Price: '+formatPrice(d.executed_price);
+                if(d.message) msg += ' — '+d.message;
+                showStatus('tradingStatus', msg, d.status==='REJECTED'?'error':'success'); 
+                loadOrders(); loadPortfolio(); 
+            })
+            .catch(function(e) { showStatus('tradingStatus','Ошибка: '+e.message,'error'); });
+        }
+        
+        function cancelOrder(id) {
+            if(!confirm('Отменить ордер '+id+'?')) return;
+            api(CONFIG.TRADING_URL+'/api/v1/orders/'+id, { method:'DELETE', headers:{'Authorization':'Bearer '+state.accessToken} })
+            .then(function(d) { showStatus('tradingStatus','Ордер отменён!','success'); loadOrders(); })
+            .catch(function(e) { showStatus('tradingStatus','Ошибка: '+e.message,'error'); });
+        }
+        
+        function startPolling() { stopPolling(); pollData(); state.pollTimer = setInterval(pollData, CONFIG.POLL_INTERVAL); }
+        function stopPolling() { if(state.pollTimer) { clearInterval(state.pollTimer); state.pollTimer=null; } }
+        function pollData() { showRefresh(true); Promise.all([loadPortfolio(),loadOrders(),loadQuotes()]).finally(function(){showRefresh(false);}); }
+        
+        document.getElementById('orderFigi').addEventListener('change',function(){ 
+            state.selectedFigi = this.value;
+            localStorage.setItem('selectedFigi', this.value);
+            updateSelectedInstrumentPrice();
+        });
+        document.getElementById('orderType').addEventListener('change',function(){ document.getElementById('priceGroup').style.display = this.value==='LIMIT'?'block':'none'; });
+        
+        if(state.sessionToken) loadAccounts();
+    </script>
+</body>
+</html>

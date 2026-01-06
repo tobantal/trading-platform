@@ -1,8 +1,10 @@
 # Makefile
 # Trading Platform - команды для разработки и тестирования
 
+
 NAMESPACE := trading
 DOCKER_USER := tobantal
+
 
 .PHONY: help \
 	test-all test-e2e test-e2e-debug test-unit test-trading test-broker test-auth \
@@ -10,7 +12,9 @@ DOCKER_USER := tobantal
 	build build-auth build-broker build-trading \
 	push push-auth push-broker push-trading \
 	deploy redeploy restart logs status \
-	ship ship-test ship-auth ship-broker ship-trading
+	ship ship-test ship-auth ship-broker ship-trading ship-ui \
+	deploy-ui delete-ui
+
 
 help:
 	@echo "Trading Platform Commands:"
@@ -38,6 +42,11 @@ help:
 	@echo "  make status           - Show pods status"
 	@echo "  make logs             - Show recent logs from all services"
 	@echo ""
+	@echo "=== UI ==="
+	@echo "  make deploy-ui        - Deploy trading UI (ConfigMap + nginx)"
+	@echo "  make delete-ui        - Delete trading UI resources"
+	@echo "  make ship-ui          - Redeploy UI from k8s/trading-ui.html"
+	@echo ""
 	@echo "=== DATABASE ==="
 	@echo "  make reset-dbs        - Reset all databases to initial state"
 	@echo ""
@@ -49,49 +58,61 @@ help:
 	@echo "  make ship-trading     - Build + push + restart trading-service"
 	@echo ""
 
+
 # =============================================================================
 # DOCKER BUILD
 # =============================================================================
+
 
 build: build-auth build-broker build-trading
 	@echo ""
 	@echo "=== All images built ==="
 
+
 build-auth:
 	@echo "--- Building auth-service ---"
 	docker build -t $(DOCKER_USER)/auth-service:latest -f auth-service/Dockerfile .
+
 
 build-broker:
 	@echo "--- Building broker-service ---"
 	docker build -t $(DOCKER_USER)/broker-service:latest -f broker-service/Dockerfile .
 
+
 build-trading:
 	@echo "--- Building trading-service ---"
 	docker build -t $(DOCKER_USER)/trading-service:latest -f trading-service/Dockerfile .
+
 
 # =============================================================================
 # DOCKER PUSH
 # =============================================================================
 
+
 push: push-auth push-broker push-trading
 	@echo ""
 	@echo "=== All images pushed ==="
+
 
 push-auth:
 	@echo "--- Pushing auth-service ---"
 	docker push $(DOCKER_USER)/auth-service:latest
 
+
 push-broker:
 	@echo "--- Pushing broker-service ---"
 	docker push $(DOCKER_USER)/broker-service:latest
+
 
 push-trading:
 	@echo "--- Pushing trading-service ---"
 	docker push $(DOCKER_USER)/trading-service:latest
 
+
 # =============================================================================
 # KUBERNETES DEPLOY
 # =============================================================================
+
 
 deploy:
 	@echo "--- Applying k8s manifests ---"
@@ -100,6 +121,7 @@ deploy:
 	@echo "Waiting for pods..."
 	@sleep 3
 	@$(MAKE) status
+
 
 redeploy:
 	@echo "=== Full Redeploy ==="
@@ -118,6 +140,7 @@ redeploy:
 	@echo ""
 	@$(MAKE) status
 
+
 restart:
 	@echo "--- Restarting deployments ---"
 	kubectl rollout restart deployment auth-service -n $(NAMESPACE)
@@ -131,9 +154,11 @@ restart:
 	@echo ""
 	@$(MAKE) status
 
+
 status:
 	@echo "--- Pods Status ---"
 	@kubectl get pods -n $(NAMESPACE) -o wide
+
 
 logs:
 	@echo "=== Recent Logs ==="
@@ -147,18 +172,22 @@ logs:
 	@echo "--- Trading Service ---"
 	@kubectl logs -n $(NAMESPACE) deployment/trading-service --tail=20 2>/dev/null || echo "No logs"
 
+
 # =============================================================================
 # WORKFLOWS (комбинированные команды)
 # =============================================================================
+
 
 ship: build push redeploy
 	@echo ""
 	@echo "=== Ship complete ==="
 
+
 ship-test: ship reset-dbs
 	@echo ""
 	@sleep 5
 	@$(MAKE) test-e2e-debug
+
 
 # Ship отдельных сервисов
 ship-auth: build-auth push-auth
@@ -166,51 +195,63 @@ ship-auth: build-auth push-auth
 	kubectl rollout restart deployment auth-service -n $(NAMESPACE)
 	kubectl rollout status deployment auth-service -n $(NAMESPACE) --timeout=120s
 
+
 ship-broker: build-broker push-broker
 	@echo "--- Restarting broker-service ---"
 	kubectl rollout restart deployment broker-service -n $(NAMESPACE)
 	kubectl rollout status deployment broker-service -n $(NAMESPACE) --timeout=120s
+
 
 ship-trading: build-trading push-trading
 	@echo "--- Restarting trading-service ---"
 	kubectl rollout restart deployment trading-service -n $(NAMESPACE)
 	kubectl rollout status deployment trading-service -n $(NAMESPACE) --timeout=120s
 
+
 # =============================================================================
 # ALL TESTS
 # =============================================================================
 
+
 test-all: test-unit test-e2e
+
 
 # =============================================================================
 # UNIT/INTEGRATION TESTS (per service, isolated)
 # =============================================================================
 
+
 test-unit: test-auth test-broker test-trading
+
 
 test-trading: reset-dbs
 	@echo ""
 	@echo "=== Running Trading Service Tests ==="
 	newman run postman/trading-service.postman_collection.json
 
+
 test-broker: reset-broker-db
 	@echo ""
 	@echo "=== Running Broker Service Tests ==="
 	newman run postman/broker-service.postman_collection.json
+
 
 test-auth: reset-auth-db
 	@echo ""
 	@echo "=== Running Auth Service Tests ==="
 	newman run postman/auth-service.postman_collection.json
 
+
 # =============================================================================
 # E2E TESTS (full system flow)
 # =============================================================================
+
 
 test-e2e: reset-dbs
 	@echo ""
 	@echo "=== Running E2E Tests ==="
 	newman run postman/trading-service-e2e.postman_collection.json
+
 
 # Debug версия - выводит логи сервисов при падении
 test-e2e-debug: reset-dbs
@@ -235,13 +276,16 @@ test-e2e-debug: reset-dbs
 		exit 1 \
 	)
 
+
 # =============================================================================
 # DATABASE RESET (k8s) - используем существующие SQL скрипты
 # =============================================================================
 
+
 reset-dbs: reset-auth-db reset-broker-db reset-trading-db
 	@echo ""
 	@echo "=== All databases reset ==="
+
 
 reset-auth-db:
 	@echo "--- Resetting Auth DB ---"
@@ -249,14 +293,44 @@ reset-auth-db:
 	@cat auth-service/sql/02-data.sql | kubectl exec -i -n $(NAMESPACE) deployment/auth-postgres -- psql -U auth_user -d auth_db
 	@echo "Auth DB reset complete"
 
+
 reset-broker-db:
 	@echo "--- Resetting Broker DB ---"
 	@cat broker-service/sql/03-clean.sql | kubectl exec -i -n $(NAMESPACE) deployment/broker-postgres -- psql -U broker_user -d broker_db
 	@cat broker-service/sql/02-data.sql | kubectl exec -i -n $(NAMESPACE) deployment/broker-postgres -- psql -U broker_user -d broker_db
 	@echo "Broker DB reset complete"
 
+
 reset-trading-db:
 	@echo "--- Resetting Trading DB ---"
 	@cat trading-service/sql/03-clean.sql | kubectl exec -i -n $(NAMESPACE) deployment/trading-postgres -- psql -U trading_user -d trading_db
 	@cat trading-service/sql/02-data.sql | kubectl exec -i -n $(NAMESPACE) deployment/trading-postgres -- psql -U trading_user -d trading_db 2>/dev/null || echo "Trading DB: no seed data"
 	@echo "Trading DB reset complete"
+
+
+# =============================================================================
+# UI DEPLOYMENT
+# =============================================================================
+
+
+deploy-ui:
+	@echo "--- Deploying Trading UI ---"
+	kubectl create configmap trading-ui -n $(NAMESPACE) \
+		--from-file=index.html=k8s/trading-ui.html \
+		-o yaml --dry-run=client | kubectl apply -f -
+	kubectl apply -f k8s/trading-ui-deployment.yaml
+	kubectl rollout restart deployment/trading-ui -n $(NAMESPACE)
+	@echo "UI deployed: http://arch.homework/ui/"
+
+
+delete-ui:
+	@echo "--- Deleting Trading UI ---"
+	kubectl delete deployment trading-ui -n $(NAMESPACE) --ignore-not-found
+	kubectl delete service trading-ui -n $(NAMESPACE) --ignore-not-found
+	kubectl delete configmap trading-ui -n $(NAMESPACE) --ignore-not-found
+	@echo "UI deleted"
+
+
+ship-ui: delete-ui deploy-ui
+	@echo ""
+	@echo "=== UI redeployed ==="

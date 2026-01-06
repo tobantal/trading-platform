@@ -76,12 +76,11 @@ protected:
             di::bind<settings::RabbitMQSettings>().in(di::singleton)
         );
         auto rabbitMQAdapter = rabbitInjector.create<std::shared_ptr<adapters::secondary::RabbitMQAdapter>>();
-
+        
         // Шаг 2: Основной injector с instance binding для RabbitMQ
         auto injector = di::make_injector(
             di::bind<settings::DbSettings>().in(di::singleton),
             di::bind<settings::RabbitMQSettings>().in(di::singleton),
-            di::bind<settings::BrokerSettings>().in(di::singleton),
             
             // RabbitMQ - один экземпляр для обоих интерфейсов
             di::bind<ports::output::IEventPublisher>().to(rabbitMQAdapter),
@@ -93,15 +92,19 @@ protected:
             di::bind<ports::output::IBrokerPositionRepository>().to<adapters::secondary::PostgresBrokerPositionRepository>().in(di::singleton),
             di::bind<ports::output::IBrokerBalanceRepository>().to<adapters::secondary::PostgresBrokerBalanceRepository>().in(di::singleton),
             
-            di::bind<adapters::secondary::EnhancedFakeBroker>().in(di::singleton),
             di::bind<ports::output::IBrokerGateway>().to<adapters::secondary::FakeBrokerAdapter>().in(di::singleton),
             di::bind<ports::input::IQuoteService>().to<application::QuoteService>().in(di::singleton)
         );
 
+        // Настройки брокера (определяюет его поведение)
+        auto brokerSettings = injector.create<std::shared_ptr<settings::BrokerSettings>>();
+        // Продвинутый эмитатор биржи
+        auto enhancedFakeBroker = injector.create<std::shared_ptr<adapters::secondary::EnhancedFakeBroker>>();
+
         // Шаг 3: Event Handlers через DI
         // OrderCommandHandler вызывает subscribe() в конструкторе
-        orderCommandHandler_ = injector.create<std::shared_ptr<application::OrderCommandHandler>>();
-        marketDataPublisher_ = injector.create<std::shared_ptr<application::MarketDataPublisher>>();
+        auto orderCommandHandler_ = injector.create<std::shared_ptr<application::OrderCommandHandler>>();
+        auto marketDataPublisher_ = injector.create<std::shared_ptr<application::MarketDataPublisher>>();
 
         // Шаг 4: Запускаем RabbitMQ ПОСЛЕ регистрации всех handlers
         std::cout << "[BrokerApp] Starting RabbitMQ consumer..." << std::endl;
@@ -126,11 +129,10 @@ protected:
         handlers_[getHandlerKey("GET", "/api/v1/orders/*")] = ordersHandler;
 
         std::cout << "[BrokerApp] Ready (POST/DELETE via RabbitMQ)" << std::endl;
-    }
 
-private:
-    std::shared_ptr<application::OrderCommandHandler> orderCommandHandler_;
-    std::shared_ptr<application::MarketDataPublisher> marketDataPublisher_;
+        enhancedFakeBroker->startSimulation(std::chrono::milliseconds{brokerSettings->getTickIntervalMs()});
+        std::cout << "[BrokerApp] fake broker simulation started" << std::endl;
+    }
 };
 
 } // namespace broker

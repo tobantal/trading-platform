@@ -1,5 +1,5 @@
+// broker-service/src/domain/events/QuoteUpdatedEvent.cpp
 #include "domain/events/QuoteUpdatedEvent.hpp"
-#include <nlohmann/json.hpp>
 
 namespace broker::domain {
 
@@ -10,21 +10,15 @@ std::string QuoteUpdatedEvent::toJson() const {
     j["timestamp"] = timestamp.toString();
     j["figi"] = figi;
     j["ticker"] = ticker;
-    j["lastPrice"] = {
-        {"units", lastPrice.units},
-        {"nano", lastPrice.nano},
-        {"currency", lastPrice.currency}
-    };
-    j["bidPrice"] = {
-        {"units", bidPrice.units},
-        {"nano", bidPrice.nano},
-        {"currency", bidPrice.currency}
-    };
-    j["askPrice"] = {
-        {"units", askPrice.units},
-        {"nano", askPrice.nano},
-        {"currency", askPrice.currency}
-    };
+    
+    // ИСПРАВЛЕНО: отправляем числа и правильные имена полей
+    // Было: j["bidPrice"] = {{"units", ...}, {"nano", ...}}
+    // Стало: j["bid"] = bidPrice.toDouble()
+    j["bid"] = bidPrice.toDouble();
+    j["ask"] = askPrice.toDouble();
+    j["last_price"] = lastPrice.toDouble();
+    j["currency"] = lastPrice.currency;
+    
     return j.dump();
 }
 

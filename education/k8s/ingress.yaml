@@ -46,3 +46,11 @@ spec:
                 name: rabbitmq
                 port:
                   number: 15672
+          # UI
+          - path: /ui(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: trading-ui
+                port:
+                  number: 80

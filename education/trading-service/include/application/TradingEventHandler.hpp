@@ -1,4 +1,4 @@
-// include/application/TradingEventHandler.hpp
+// trading-service/include/application/TradingEventHandler.hpp
 #pragma once
 
 #include "ports/output/IEventConsumer.hpp"
@@ -89,6 +89,24 @@ private:
         }
     }
 
+    // Безопасный парсинг timestamp (может быть числом или строкой)
+    static int64_t parseTimestamp(const nlohmann::json& json, const std::string& key) {
+        if (!json.contains(key)) return 0;
+        
+        const auto& val = json[key];
+        if (val.is_number()) {
+            return val.get<int64_t>();
+        } else if (val.is_string()) {
+            // Пытаемся распарсить строку как число, или игнорируем
+            try {
+                return std::stoll(val.get<std::string>());
+            } catch (...) {
+                return 0;  // ISO timestamp - игнорируем
+            }
+        }
+        return 0;
+    }
+
     void handleOrderEvent(const std::string& routingKey, const nlohmann::json& json) {
         OrderUpdate update;
         update.orderId = json.value("order_id", "");
@@ -98,7 +116,7 @@ private:
         update.executedLots = json.value("executed_lots", json.value("filled_lots", 0));
         update.executedPrice = json.value("executed_price", 0.0);
         update.reason = json.value("reason", "");
-        update.timestamp = json.value("timestamp", 0);
+        update.timestamp = parseTimestamp(json, "timestamp");
         
         std::cout << "[TradingEventHandler] " << routingKey << ": " << update.orderId << std::endl;
         
@@ -117,7 +135,7 @@ private:
         update.ask = json.value("ask", 0.0);
         update.lastPrice = json.value("last_price", 0.0);
         update.currency = json.value("currency", "RUB");
-        update.timestamp = json.value("timestamp", 0);
+        update.timestamp = parseTimestamp(json, "timestamp");
         
         {
             std::lock_guard<std::mutex> lock(cacheMutex_);

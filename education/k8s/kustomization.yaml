@@ -15,6 +15,7 @@ resources:
   - trading-postgres.yaml
   - trading-service.yaml
   - ingress.yaml
+  - trading-ui.yaml
 
 # Без хэш-суффикса в именах ConfigMap
 generatorOptions:

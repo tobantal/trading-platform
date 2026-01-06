@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trading-ui
+  namespace: trading
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trading-ui
+  template:
+    metadata:
+      labels:
+        app: trading-ui
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: html
+              mountPath: /usr/share/nginx/html
+      volumes:
+        - name: html
+          configMap:
+            name: trading-ui
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trading-ui
+  namespace: trading
+spec:
+  selector:
+    app: trading-ui
+  ports:
+    - port: 80
+      targetPort: 80
