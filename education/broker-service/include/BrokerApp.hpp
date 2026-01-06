@@ -91,7 +91,7 @@ protected:
             di::bind<ports::output::IBrokerOrderRepository>().to<adapters::secondary::PostgresBrokerOrderRepository>().in(di::singleton),
             di::bind<ports::output::IBrokerPositionRepository>().to<adapters::secondary::PostgresBrokerPositionRepository>().in(di::singleton),
             di::bind<ports::output::IBrokerBalanceRepository>().to<adapters::secondary::PostgresBrokerBalanceRepository>().in(di::singleton),
-            
+            di::bind<adapters::secondary::EnhancedFakeBroker>().in(di::singleton),
             di::bind<ports::output::IBrokerGateway>().to<adapters::secondary::FakeBrokerAdapter>().in(di::singleton),
             di::bind<ports::input::IQuoteService>().to<application::QuoteService>().in(di::singleton)
         );

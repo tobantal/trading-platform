@@ -106,7 +106,12 @@
             <div class="grid">
                 <div>
                     <h2>Портфель</h2>
-                    <div class="card"><h3>Баланс</h3><div id="balanceInfo" class="price" style="font-size:18px;">...</div></div>
+                    <div class="card"><h3>Портфель</h3><div id="portfolioInfo" style="font-size:14px;">
+                        <div>Кэш: <span id="cashValue" class="price">...</span></div>
+                        <div>Позиции: <span id="positionsValue" class="price">...</span></div>
+                        <div style="border-top:1px solid #ddd;margin-top:5px;padding-top:5px;"><strong>Итого: <span id="totalValue" class="price" style="font-size:16px;">...</span></strong></div>
+                        <div>P&L: <span id="pnlValue">...</span></div>
+                    </div></div>
                     <h3>Позиции</h3><div id="positionsTable"></div>
                     <h2>Ордера</h2>
                     <div id="orderForm">
@@ -122,6 +127,7 @@
                         </div>
                         <div id="selectedInstrumentPrice" class="card" style="margin-top:10px;padding:10px;"></div>
                         <button class="success" onclick="createOrder()">Создать ордер</button>
+                        <div id="orderStatus" style="margin-top:10px;"></div>
                     </div>
                     <h3>История ордеров</h3><div id="ordersTable"></div>
                 </div>
@@ -313,17 +319,35 @@
         function loadPortfolio() {
             api(CONFIG.TRADING_URL+'/api/v1/portfolio', { headers:{'Authorization':'Bearer '+state.accessToken} })
             .then(function(d) { 
-                document.getElementById('balanceInfo').innerHTML = formatMoney(d.cash||d.balance||{});
+                // Отображаем сводку портфеля
+                var cash = d.cash ? d.cash.amount : 0;
+                var totalValue = d.total_value ? d.total_value.amount : cash;
+                var positionsValue = totalValue - cash;
+                var pnl = d.total_pnl ? d.total_pnl.amount : 0;
+                var pnlPercent = d.pnl_percent || 0;
+                
+                document.getElementById('cashValue').innerHTML = formatMoney(d.cash||{});
+                document.getElementById('positionsValue').textContent = positionsValue.toFixed(2) + ' RUB';
+                document.getElementById('totalValue').textContent = totalValue.toFixed(2) + ' RUB';
+                
+                var pnlClass = pnl >= 0 ? 'price-green' : 'price-red';
+                var pnlSign = pnl >= 0 ? '+' : '';
+                document.getElementById('pnlValue').innerHTML = '<span class="'+pnlClass+'">'+pnlSign+pnl.toFixed(2)+' RUB ('+pnlSign+pnlPercent.toFixed(2)+'%)</span>';
+                
                 var pos = d.positions || [];
                 if(pos.length===0) { document.getElementById('positionsTable').innerHTML = '<div class="empty-state">Нет позиций</div>'; }
-                else { var h='<table><tr><th>Ticker</th><th>Лоты</th><th>Бумаги</th><th>Avg</th></tr>'; 
+                else { var h='<table><tr><th>Ticker</th><th>Лоты</th><th>Бумаги</th><th>Avg</th><th>P&L</th></tr>'; 
                     pos.forEach(function(p){
                         var instr = state.instruments.find(function(i){return i.figi===p.figi;});
                         var ticker = instr ? instr.ticker : p.figi.substring(0,8);
                         var lot = instr ? (instr.lot||1) : 1;
                         var qty = p.quantity || p.lots || 0;
                         var lots = Math.floor(qty / lot);
-                        h+='<tr><td>'+ticker+'</td><td>'+lots+'</td><td>'+qty+'</td><td class="price">'+formatPrice(p.average_price)+'</td></tr>';
+                        var posPnl = p.pnl || 0;
+                        var posPnlPercent = p.pnl_percent || 0;
+                        var posPnlClass = posPnl >= 0 ? 'price-green' : 'price-red';
+                        h+='<tr><td>'+ticker+'</td><td>'+lots+'</td><td>'+qty+'</td><td class="price">'+formatPrice(p.average_price)+'</td>';
+                        h+='<td class="'+posPnlClass+'">'+(posPnl>=0?'+':'')+posPnl.toFixed(2)+' ('+(posPnlPercent>=0?'+':'')+posPnlPercent.toFixed(1)+'%)</td></tr>';
                     }); 
                     document.getElementById('positionsTable').innerHTML = h+'</table>'; 
                 }
@@ -357,24 +381,41 @@
         
         function createOrder() {
             var figi = document.getElementById('orderFigi').value, dir = document.getElementById('orderDirection').value, qty = parseInt(document.getElementById('orderQuantity').value), type = document.getElementById('orderType').value, price = parseFloat(document.getElementById('orderPrice').value);
-            if(!figi||qty<=0) { showStatus('tradingStatus','Выберите инструмент','error'); return; }
+            if(!figi||qty<=0) { showStatus('orderStatus','Выберите инструмент','error'); return; }
+            
+            // Проверка ±40% от рыночной цены для LIMIT ордеров
+            if(type==='LIMIT' && price > 0) {
+                var q = state.quotes[figi];
+                if(q) {
+                    var marketPrice = dir==='BUY' ? (q.ask_price||q.last_price) : (q.bid_price||q.last_price);
+                    if(marketPrice > 0) {
+                        var minPrice = marketPrice * 0.6;
+                        var maxPrice = marketPrice * 1.4;
+                        if(price < minPrice || price > maxPrice) {
+                            showStatus('orderStatus', 'Цена должна быть в диапазоне ±40% от рыночной ('+minPrice.toFixed(2)+' — '+maxPrice.toFixed(2)+')','error');
+                            return;
+                        }
+                    }
+                }
+            }
+            
             var data = {figi:figi, direction:dir, quantity:qty, type:type}; if(type==='LIMIT'&&price>0) data.price = price;
             api(CONFIG.TRADING_URL+'/api/v1/orders', { method:'POST', headers:{'Authorization':'Bearer '+state.accessToken}, body:JSON.stringify(data) })
             .then(function(d) { 
                 var msg = 'Status: '+d.status;
                 if(d.executed_price) msg += ', Price: '+formatPrice(d.executed_price);
                 if(d.message) msg += ' — '+d.message;
-                showStatus('tradingStatus', msg, d.status==='REJECTED'?'error':'success'); 
+                showStatus('orderStatus', msg, d.status==='REJECTED'?'error':'success'); 
                 loadOrders(); loadPortfolio(); 
             })
-            .catch(function(e) { showStatus('tradingStatus','Ошибка: '+e.message,'error'); });
+            .catch(function(e) { showStatus('orderStatus','Ошибка: '+e.message,'error'); });
         }
         
         function cancelOrder(id) {
             if(!confirm('Отменить ордер '+id+'?')) return;
             api(CONFIG.TRADING_URL+'/api/v1/orders/'+id, { method:'DELETE', headers:{'Authorization':'Bearer '+state.accessToken} })
-            .then(function(d) { showStatus('tradingStatus','Ордер отменён!','success'); loadOrders(); })
-            .catch(function(e) { showStatus('tradingStatus','Ошибка: '+e.message,'error'); });
+            .then(function(d) { showStatus('orderStatus','Ордер отменён!','success'); loadOrders(); })
+            .catch(function(e) { showStatus('orderStatus','Ошибка: '+e.message,'error'); });
         }
         
         function startPolling() { stopPolling(); pollData(); state.pollTimer = setInterval(pollData, CONFIG.POLL_INTERVAL); }

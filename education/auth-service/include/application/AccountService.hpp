@@ -84,10 +84,8 @@ private:
     }
 
     std::string encodeToken(const std::string& token) {
-        // TODO: Production - RSA шифрование с публичным ключом Broker
-        // Для учебного проекта - base64
         if (token.empty()) return "";
-        return "enc:" + token;  // Простая маркировка для демо
+        return "enc:" + token;  // TODO: Простая маркировка для учебного проекта
     }
 };
 

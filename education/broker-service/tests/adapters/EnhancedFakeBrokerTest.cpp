@@ -112,7 +112,7 @@ TEST_F(EnhancedFakeBrokerTest, PlaceOrder_SellMarket_WithPosition_Fills) {
 }
 
 TEST_F(EnhancedFakeBrokerTest, PlaceOrder_LimitBuy_Queued) {
-    auto req = createBuyLimit(SBER_FIGI, 10, 200.0);  // Low price
+    auto req = createBuyLimit(LKOH_FIGI, 10, 200.0);  // Low price
     auto result = broker_->placeOrder(TEST_ACCOUNT, req);
     
     EXPECT_EQ(result.status, Status::PENDING);

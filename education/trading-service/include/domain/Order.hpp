@@ -22,7 +22,6 @@ public:
     OrderType type;
     int64_t quantity;
     Money price;
-    // FIX: добавлены поля для исполненной цены и количества
     Money executedPrice;
     int64_t executedQuantity = 0;
     OrderStatus status;

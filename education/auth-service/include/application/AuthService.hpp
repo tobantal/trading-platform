@@ -146,7 +146,7 @@ private:
     std::shared_ptr<ports::output::IJwtProvider> jwtProvider_;
 
     std::string generateUuid() {
-        // Простая генерация UUID для демо
+        // Простая генерация UUID для учебного проекта
         static int counter = 0;
         return std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) 
                + "-" + std::to_string(++counter);
