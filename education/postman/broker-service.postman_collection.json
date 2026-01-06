@@ -195,10 +195,15 @@
                   "",
                   "pm.test('Quote has required fields', function () {",
                   "    var jsonData = pm.response.json();",
-                  "    pm.expect(jsonData.figi).to.eql('BBG004730N88');",
-                  "    pm.expect(jsonData).to.have.property('bid_price');",
-                  "    pm.expect(jsonData).to.have.property('ask_price');",
-                  "    pm.expect(jsonData).to.have.property('last_price');",
+                  "    // API возвращает {\"quotes\": [{...}]}",
+                  "    pm.expect(jsonData).to.have.property('quotes');",
+                  "    pm.expect(jsonData.quotes).to.be.an('array').that.is.not.empty;",
+                  "    ",
+                  "    var quote = jsonData.quotes[0];",
+                  "    pm.expect(quote.figi).to.eql('BBG004730N88');",
+                  "    pm.expect(quote).to.have.property('bid_price');",
+                  "    pm.expect(quote).to.have.property('ask_price');",
+                  "    pm.expect(quote).to.have.property('last_price');",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -213,6 +218,38 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "quotes"],
               "query": [{ "key": "figi", "value": "BBG004730N88" }]
+            }
+          }
+        },
+        {
+          "name": "Get Multiple Quotes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Multiple quotes returned', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.quotes).to.be.an('array');",
+                  "    pm.expect(jsonData.quotes.length).to.be.at.least(2);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/quotes?figis=BBG004730N88,BBG004730RP0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "quotes"],
+              "query": [{ "key": "figis", "value": "BBG004730N88,BBG004730RP0" }]
             }
           }
         },
@@ -435,4 +472,3 @@
     }
   ]
 }
-
