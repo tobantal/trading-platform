@@ -35,14 +35,9 @@ target_link_libraries(broker-service PRIVATE
 # ТЕСТЫ
 # ============================================================================
 if(BUILD_TESTS)
-    set(BROKER_TEST_SOURCES
-        tests/adapters/MarketScenarioTest.cpp
-        tests/adapters/PriceSimulatorTest.cpp
-        tests/adapters/OrderProcessorTest.cpp
-        tests/adapters/BackgroundTickerTest.cpp
-        tests/adapters/EnhancedFakeBrokerTest.cpp
-        tests/endpoints/OrdersHandlerTest.cpp
-        tests/endpoints/PortfolioHandlerTest.cpp
+    file(GLOB_RECURSE BROKER_TEST_SOURCES
+        CONFIGURE_DEPENDS
+        tests/*.cpp
     )
     
     add_executable(broker-service-tests ${BROKER_TEST_SOURCES})
