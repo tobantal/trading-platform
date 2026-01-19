@@ -42,7 +42,7 @@ namespace trading::adapters::primary
             std::string normalizedPath = normalizePath(req.getPath());
 
             // Инкрементируем ДО обработки (считаем входящие запросы)
-            metrics_->increment("http_requests_total", {{"method", req.getMethod()},
+            metrics_->increment("http_requests_total", {{"method", req.getMethod()},//FIXME: использовать req.getPathPattern() вместо req.getMethod(), тогда от нормалтзации можно отказаться 
                                                         {"path", normalizedPath}});
 
             // Делегируем обработку
@@ -66,6 +66,7 @@ namespace trading::adapters::primary
          * @param path Оригинальный path запроса
          * @return Нормализованный path для метрик
          */
+        // FIXME: нормализация не нужна
         std::string normalizePath(const std::string &path) const
         {
             // Сначала убираем query string

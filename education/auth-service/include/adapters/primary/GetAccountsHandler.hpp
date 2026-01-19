@@ -17,13 +17,14 @@ public:
       , accountService_(std::move(accountService)) {}
 
     void handle(IRequest& req, IResponse& res) override {
-        auto token = extractBearerToken(req);
-        if (!token) {
+        auto token = req.getBearerToken().value_or("");
+        if (token.empty()) {
             sendError(res, 401, "Authorization required");
             return;
         }
 
-        auto validation = authService_->validateSessionToken(*token);
+        auto validation = authService_->validateSessionToken(token);
+
         if (!validation.valid) {
             sendError(res, 401, validation.message);
             return;
@@ -41,27 +42,15 @@ public:
             response["accounts"].push_back(item);
         }
 
-        res.setStatus(200);
-        res.setHeader("Content-Type", "application/json");
-        res.setBody(response.dump());
+        res.setResult(200, "application/json", response.dump());
     }
 
 private:
     std::shared_ptr<ports::input::IAuthService> authService_;
     std::shared_ptr<ports::input::IAccountService> accountService_;
 
-    std::optional<std::string> extractBearerToken(IRequest& req) {
-        auto headers = req.getHeaders();
-        auto it = headers.find("Authorization");
-        if (it == headers.end()) return std::nullopt;
-        if (it->second.substr(0, 7) != "Bearer ") return std::nullopt;
-        return it->second.substr(7);
-    }
-
     void sendError(IResponse& res, int status, const std::string& msg) {
-        res.setStatus(status);
-        res.setHeader("Content-Type", "application/json");
-        res.setBody("{\"error\": \"" + msg + "\"}");
+        res.setResult(status, "application/json", "{\"error\": \"" + msg + "\"}");
     }
 };
 

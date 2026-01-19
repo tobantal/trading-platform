@@ -12,9 +12,7 @@ namespace broker::adapters::primary {
 class MetricsHandler : public IHttpHandler {
 public:
     void handle(IRequest& req, IResponse& res) override {
-        res.setStatus(200);
-        res.setHeader("Content-Type", "text/plain; version=0.0.4");
-        res.setBody(serialize());
+        res.setResult(200, "text/plain; version=0.0.4", serialize());
     }
 
     void incrementHttpRequests(const std::string& method, const std::string& path, int status) {

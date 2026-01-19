@@ -45,9 +45,7 @@ public:
      * @param res HTTP ответ с метриками в Prometheus формате
      */
     void handle(IRequest& req, IResponse& res) override {
-        res.setStatus(200);
-        res.setHeader("Content-Type", "text/plain; version=0.0.4; charset=utf-8");
-        res.setBody(metrics_->toPrometheusFormat());
+        res.setResult(200, "text/plain; version=0.0.4; charset=utf-8", metrics_->toPrometheusFormat());
     }
 
 private:

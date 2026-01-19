@@ -115,18 +115,19 @@ protected:
         handlers_[getHandlerKey("GET", "/metrics")] = injector.create<std::shared_ptr<adapters::primary::MetricsHandler>>();
         
         auto instrHandler = injector.create<std::shared_ptr<adapters::primary::InstrumentsHandler>>();
-        handlers_[getHandlerKey("GET", "/api/v1/instruments")] = instrHandler;
-        handlers_[getHandlerKey("GET", "/api/v1/instruments/*")] = instrHandler;
+        handlers_[getHandlerKey("GET", "/api/v1/instruments")] = instrHandler; // TODO: GetAllInstrumentsHandler
+        handlers_[getHandlerKey("GET", "/api/v1/instruments/*")] = instrHandler; // TODO: GetInstrumentHandler
         
         handlers_[getHandlerKey("GET", "/api/v1/quotes")] = injector.create<std::shared_ptr<adapters::primary::QuotesHandler>>();
         
         auto portfolioHandler = injector.create<std::shared_ptr<adapters::primary::PortfolioHandler>>();
-        handlers_[getHandlerKey("GET", "/api/v1/portfolio")] = portfolioHandler;
-        handlers_[getHandlerKey("GET", "/api/v1/portfolio/*")] = portfolioHandler;
+        handlers_[getHandlerKey("GET", "/api/v1/portfolio")] = portfolioHandler; // TODO: GetPortfolioHandler
+        handlers_[getHandlerKey("GET", "/api/v1/portfolio/positions")] = portfolioHandler; // TODO: GetPositionHandler
+        handlers_[getHandlerKey("GET", "/api/v1/portfolio/cash")] = portfolioHandler; // TODO: GetCashHandler
         
         auto ordersHandler = injector.create<std::shared_ptr<adapters::primary::OrdersHandler>>();
-        handlers_[getHandlerKey("GET", "/api/v1/orders")] = ordersHandler;
-        handlers_[getHandlerKey("GET", "/api/v1/orders/*")] = ordersHandler;
+        handlers_[getHandlerKey("GET", "/api/v1/orders")] = ordersHandler; // TODO: GetOrdersHandler
+        handlers_[getHandlerKey("GET", "/api/v1/orders/*")] = ordersHandler;// TODO: GetOrderHandler
 
         std::cout << "[BrokerApp] Ready (POST/DELETE via RabbitMQ)" << std::endl;
 

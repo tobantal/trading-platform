@@ -27,26 +27,22 @@ public:
     }
 
     void handle(IRequest& req, IResponse& res) override {
-        auto params = req.getParams();
-        
         // Поддержка обоих параметров: figi и figis
         std::vector<std::string> figis;
         
-        auto itFigis = params.find("figis");
-        auto itFigi = params.find("figi");
+        auto itFigis = req.getQueryParam("figis").value_or("");
+        auto itFigi = req.getQueryParam("figi").value_or("");
         
-        if (itFigis != params.end() && !itFigis->second.empty()) {
+        if (!itFigis.empty()) {
             // Парсим список через запятую
-            figis = parseFigis(itFigis->second);
-        } else if (itFigi != params.end() && !itFigi->second.empty()) {
+            figis = parseFigis(itFigis);
+        } else if (!itFigi.empty()) {
             // Один инструмент
-            figis.push_back(itFigi->second);
+            figis.push_back(itFigi);
         }
         
         if (figis.empty()) {
-            res.setStatus(400);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(R"({"error": "Missing figi or figis parameter"})");
+            res.setResult(400, "application/json", R"({"error": "Missing figi or figis parameter"})");
             return;
         }
         
@@ -68,9 +64,7 @@ public:
             }
         }
         
-        res.setStatus(200);
-        res.setHeader("Content-Type", "application/json");
-        res.setBody(response.dump());
+        res.setResult(200, "application/json", response.dump());
     }
 
 private:

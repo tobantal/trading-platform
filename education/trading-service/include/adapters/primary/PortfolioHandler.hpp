@@ -36,19 +36,11 @@ public:
         // Извлекаем accountId из access token
         auto accountId = extractAccountId(req);
         if (!accountId) {
-            res.setStatus(401);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(R"({"error": "Access token required. Use POST /api/v1/auth/select-account to get one."})");
+            res.setResult(401, "application/json", R"({"error": "Access token required. Use POST /api/v1/auth/select-account to get one."})");
             return;
         }
 
         std::string path = req.getPath();
-        
-        // Убираем query string для маршрутизации
-        size_t queryPos = path.find('?');
-        if (queryPos != std::string::npos) {
-            path = path.substr(0, queryPos);
-        }
         
         if (path == "/api/v1/portfolio") {
             handleGetPortfolio(req, res, *accountId);
@@ -57,9 +49,7 @@ public:
         } else if (path == "/api/v1/portfolio/cash") {
             handleGetCash(req, res, *accountId);
         } else {
-            res.setStatus(404);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(R"({"error": "Not found"})");
+            res.setResult(404, "application/json", R"({"error": "Not found"})");
         }
     }
 
@@ -96,9 +86,7 @@ private:
         }
         response["positions"] = positions;
 
-        res.setStatus(200);
-        res.setHeader("Content-Type", "application/json");
-        res.setBody(response.dump());
+        res.setResult(200, "application/json", response.dump());
     }
 
     /**
@@ -113,9 +101,7 @@ private:
             response.push_back(positionToJson(pos));
         }
 
-        res.setStatus(200);
-        res.setHeader("Content-Type", "application/json");
-        res.setBody(response.dump());
+        res.setResult(200, "application/json", response.dump());
     }
 
     /**
@@ -129,9 +115,7 @@ private:
         response["amount"] = cash.toDouble();
         response["currency"] = cash.currency;
 
-        res.setStatus(200);
-        res.setHeader("Content-Type", "application/json");
-        res.setBody(response.dump());
+        res.setResult(200, "application/json", response.dump());
     }
 
     /**
@@ -167,18 +151,7 @@ private:
      */
     std::optional<std::string> extractAccountId(IRequest& req)
     {
-        auto headers = req.getHeaders();
-        auto it = headers.find("Authorization");
-        if (it == headers.end()) {
-            return std::nullopt;
-        }
-
-        std::string auth = it->second;
-        if (auth.find("Bearer ") != 0) {
-            return std::nullopt;
-        }
-
-        std::string token = auth.substr(7);
+        std::string token = req.getBearerToken().value_or("");
         return authClient_->getAccountIdFromToken(token);
     }
 };

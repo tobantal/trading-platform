@@ -13,37 +13,23 @@ public:
         : authService_(std::move(authService)) {}
 
     void handle(IRequest& req, IResponse& res) override {
-        auto token = extractBearerToken(req);
-        if (!token) {
-            res.setStatus(401);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(R"({"error": "Authorization header required"})");
+        auto token = req.getBearerToken().value_or("");
+        if (token.empty()) {
+            res.setResult(401, "application/json", R"({"error": "Authorization header required"})");
             return;
         }
 
-        bool success = authService_->logout(*token);
+        bool success = authService_->logout(token);
         
         nlohmann::json response;
         response["success"] = success;
         response["message"] = success ? "Logged out" : "Token not found";
 
-        res.setStatus(200);
-        res.setHeader("Content-Type", "application/json");
-        res.setBody(response.dump());
+        res.setResult(200, "application/json", response.dump());
     }
 
 private:
     std::shared_ptr<ports::input::IAuthService> authService_;
-
-    std::optional<std::string> extractBearerToken(IRequest& req) {
-        auto headers = req.getHeaders();
-        auto it = headers.find("Authorization");
-        if (it == headers.end()) return std::nullopt;
-        
-        const std::string& auth = it->second;
-        if (auth.substr(0, 7) != "Bearer ") return std::nullopt;
-        return auth.substr(7);
-    }
 };
 
 } // namespace auth::adapters::primary

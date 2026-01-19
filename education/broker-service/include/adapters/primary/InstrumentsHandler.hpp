@@ -24,13 +24,11 @@ public:
         
         if (path.length() > basePath.length() + 1) {
             // GET /api/v1/instruments/{figi}
-            std::string figi = path.substr(basePath.length() + 1);
+            std::string figi = req.getPathParam(0).value_or("");
             auto instrument = quoteService_->getInstrument(figi);
             
             if (!instrument) {
-                res.setStatus(404);
-                res.setHeader("Content-Type", "application/json");
-                res.setBody(R"({"error": "Instrument not found"})");
+                res.setResult(404, "application/json", R"({"error": "Instrument not found"})");
                 return;
             }
             
@@ -41,9 +39,7 @@ public:
             j["currency"] = instrument->currency;
             j["lot"] = instrument->lot;
             
-            res.setStatus(200);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(j.dump());
+            res.setResult(200, "application/json", j.dump());
         } else {
             // GET /api/v1/instruments - list all
             auto instruments = quoteService_->getInstruments();
@@ -59,9 +55,7 @@ public:
                 j.push_back(item);
             }
             
-            res.setStatus(200);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(j.dump());
+            res.setResult(200, "application/json", j.dump());
         }
     }
 

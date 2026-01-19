@@ -30,7 +30,7 @@ public:
         std::string path = req.getPath();
         
         // Извлекаем account_id из query параметров
-        auto params = req.getParams();
+        auto params = req.getQueryParams();
         auto it = params.find("account_id");
         
         if (it == params.end() || it->second.empty()) {

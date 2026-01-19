@@ -31,14 +31,14 @@ public:
 
     void handle(IRequest& req, IResponse& res) override {
         // 1. Извлекаем session_token из заголовка
-        auto sessionToken = extractBearerToken(req);
-        if (!sessionToken) {
+        auto session_token = req.getBearerToken().value_or("");
+        if (session_token.empty()) {
             sendError(res, 401, "Authorization required. Use session_token in Bearer header.");
             return;
         }
 
-        // 2. Валидируем session_token и получаем user_id
-        auto validation = authService_->validateSessionToken(*sessionToken);
+        // 2. Валидируем token и получаем user_id
+        auto validation = authService_->validateSessionToken(session_token);
         if (!validation.valid) {
             sendError(res, 401, validation.message);
             return;
@@ -66,7 +66,7 @@ public:
         }
 
         // 5. Создаём access_token
-        auto accessToken = authService_->createAccessToken(*sessionToken, accountId);
+        auto accessToken = authService_->createAccessToken(session_token, accountId);
         if (!accessToken) {
             sendError(res, 500, "Failed to create access token");
             return;
@@ -80,27 +80,16 @@ public:
         response["expires_in"] = 3600;  // 1 час
         response["token_type"] = "Bearer";
 
-        res.setStatus(200);
-        res.setHeader("Content-Type", "application/json");
-        res.setBody(response.dump());
+        res.setResult(200, "application/json", response.dump());
     }
 
 private:
     std::shared_ptr<ports::input::IAuthService> authService_;
     std::shared_ptr<ports::input::IAccountService> accountService_;
 
-    std::optional<std::string> extractBearerToken(IRequest& req) {
-        auto headers = req.getHeaders();
-        auto it = headers.find("Authorization");
-        if (it == headers.end()) return std::nullopt;
-        if (it->second.substr(0, 7) != "Bearer ") return std::nullopt;
-        return it->second.substr(7);
-    }
 
     void sendError(IResponse& res, int status, const std::string& msg) {
-        res.setStatus(status);
-        res.setHeader("Content-Type", "application/json");
-        res.setBody("{\"error\": \"" + msg + "\"}");
+        res.setResult(status, "application/json", "{\"error\": \"" + msg + "\"}");
     }
 };
 

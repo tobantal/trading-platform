@@ -37,18 +37,13 @@ public:
     {
         // Извлекаем accountId из access token
         auto accountId = extractAccountId(req);
-        if (!accountId) {
-            res.setStatus(401);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(R"({"error": "Access token required. Use POST /api/v1/auth/select-account to get one."})");
+        if (!accountId) { 
+            res.setResult(401, "application/json", R"({"error": "Access token required. Use POST /api/v1/auth/select-account to get one."})");
             return;
         }
 
         std::string method = req.getMethod();
-        std::string fullPath = req.getPath();
-        
-        // Извлекаем путь без query string для маршрутизации
-        std::string path = extractPath(fullPath);
+        std::string path = req.getPath();
         
         if (method == "POST" && path == "/api/v1/orders") {
             handleCreateOrder(req, res, *accountId);
@@ -59,27 +54,13 @@ public:
         } else if (method == "DELETE" && path.find("/api/v1/orders/") == 0) {
             handleCancelOrder(res, *accountId, path);
         } else {
-            res.setStatus(404);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(R"({"error": "Not found"})");
+            res.setResult(404, "application/json", R"({"error": "Not found"})");
         }
     }
 
 private:
     std::shared_ptr<ports::input::IOrderService> orderService_;
     std::shared_ptr<ports::output::IAuthClient> authClient_;
-
-    /**
-     * @brief Извлекает путь без query string
-     */
-    std::string extractPath(const std::string& fullPath)
-    {
-        size_t pos = fullPath.find('?');
-        if (pos != std::string::npos) {
-            return fullPath.substr(0, pos);
-        }
-        return fullPath;
-    }
 
     /**
      * @brief Обрабатывает запрос создания ордера.
@@ -113,15 +94,11 @@ private:
 
             // Валидация
             if (orderReq.figi.empty()) {
-                res.setStatus(400);
-                res.setHeader("Content-Type", "application/json");
-                res.setBody(R"({"error": "FIGI is required"})");
+                res.setResult(400, "application/json", R"({"error": "FIGI is required"})");
                 return;
             }
             if (orderReq.quantity <= 0) {
-                res.setStatus(400);
-                res.setHeader("Content-Type", "application/json");
-                res.setBody(R"({"error": "Quantity must be positive"})");
+                res.setResult(400, "application/json", R"({"error": "Quantity must be positive"})");
                 return;
             }
 
@@ -137,14 +114,10 @@ private:
             response["timestamp"] = result.timestamp.toString();
 
             int httpStatus = (result.status == domain::OrderStatus::REJECTED) ? 400 : 201;
-            res.setStatus(httpStatus);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(response.dump());
+            res.setResult(httpStatus, "application/json", response.dump());
 
         } catch (const nlohmann::json::exception& e) {
-            res.setStatus(400);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(R"({"error": "Invalid JSON"})");
+            res.setResult(400, "application/json", R"({"error": "Invalid JSON"})");
         }
     }
 
@@ -161,9 +134,7 @@ private:
             response["orders"].push_back(orderToJson(order));
         }
 
-        res.setStatus(200);
-        res.setHeader("Content-Type", "application/json");
-        res.setBody(response.dump());
+        res.setResult(200, "application/json", response.dump());
     }
 
     /**
@@ -175,15 +146,11 @@ private:
         
         auto order = orderService_->getOrderById(accountId, orderId);
         if (!order) {
-            res.setStatus(404);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(R"({"error": "Order not found"})");
+            res.setResult(404, "application/json", R"({"error": "Order not found"})");
             return;
         }
 
-        res.setStatus(200);
-        res.setHeader("Content-Type", "application/json");
-        res.setBody(orderToJson(*order).dump());
+        res.setResult(200, "application/json", orderToJson(*order).dump());
     }
 
     /**
@@ -199,13 +166,9 @@ private:
             nlohmann::json response;
             response["message"] = "Order cancelled";
             response["order_id"] = orderId;
-            res.setStatus(200);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(response.dump());
+            res.setResult(200, "application/json", response.dump());
         } else {
-            res.setStatus(400);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(R"({"error": "Cannot cancel order"})");
+            res.setResult(400, "application/json", R"({"error": "Cannot cancel order"})");
         }
     }
 
@@ -234,20 +197,10 @@ private:
     /**
      * @brief Извлекает accountId из access token через auth-service
      */
+    //FIXME: вынести логику извлечения accountId в middleware или хэндлер-обертку по аналогии с идемпотентностью
     std::optional<std::string> extractAccountId(IRequest& req)
     {
-        auto headers = req.getHeaders();
-        auto it = headers.find("Authorization");
-        if (it == headers.end()) {
-            return std::nullopt;
-        }
-
-        std::string auth = it->second;
-        if (auth.find("Bearer ") != 0) {
-            return std::nullopt;
-        }
-
-        std::string token = auth.substr(7);
+        std::string token = req.getBearerToken().value_or("");
         return authClient_->getAccountIdFromToken(token);
     }
 };

@@ -52,9 +52,7 @@ public:
             response["user_id"] = result.userId;
             response["message"] = result.message;
 
-            res.setStatus(200);
-            res.setHeader("Content-Type", "application/json");
-            res.setBody(response.dump());
+            res.setResult(200, "application/json", response.dump());
 
         } catch (const nlohmann::json::exception& e) {
             sendError(res, 400, "Invalid JSON");
@@ -67,9 +65,7 @@ private:
     void sendError(IResponse& res, int status, const std::string& message) {
         nlohmann::json error;
         error["error"] = message;
-        res.setStatus(status);
-        res.setHeader("Content-Type", "application/json");
-        res.setBody(error.dump());
+        res.setResult(status, "application/json", error.dump());
     }
 };
 

@@ -15,49 +15,15 @@
 #include "mocks/InMemoryAccountRepository.hpp"
 #include "mocks/InMemorySessionRepository.hpp"
 
+// Используем SimpleRequest/SimpleResponse из http-server-core
+#include "SimpleRequest.hpp"
+#include "SimpleResponse.hpp"
+
 #include <nlohmann/json.hpp>
 
 using namespace auth;
 using namespace auth::tests::mocks;
 using namespace auth::adapters::primary;
-
-// ============================================
-// MOCK REQUEST/RESPONSE
-// ============================================
-
-class MockRequest : public IRequest {
-public:
-    std::string method_;
-    std::string path_;
-    std::string body_;
-    std::map<std::string, std::string> headers_;
-    std::map<std::string, std::string> params_;
-    std::string ip_ = "127.0.0.1";
-    int port_ = 80;
-
-    std::string getMethod() const override { return method_; }
-    std::string getPath() const override { return path_; }
-    std::string getBody() const override { return body_; }
-    std::map<std::string, std::string> getHeaders() const override { return headers_; }
-    std::map<std::string, std::string> getParams() const override { return params_; }
-    std::string getIp() const override { return ip_; }
-    int getPort() const override { return port_; }
-};
-
-class MockResponse : public IResponse {
-public:
-    int status_ = 200;
-    std::string body_;
-    std::map<std::string, std::string> headers_;
-
-    void setStatus(int status) override { status_ = status; }
-    void setHeader(const std::string& key, const std::string& value) override { headers_[key] = value; }
-    void setBody(const std::string& body) override { body_ = body; }
-    
-    // Helpers для тестов (не часть интерфейса)
-    int getStatus() const { return status_; }
-    std::string getBody() const { return body_; }
-};
 
 // ============================================
 // TEST FIXTURE
@@ -100,17 +66,17 @@ protected:
 TEST_F(AuthEndpointTest, RegisterHandler_Success) {
     RegisterHandler handler(authService_);
     
-    MockRequest req;
-    req.method_ = "POST";
-    req.path_ = "/api/v1/auth/register";
-    req.body_ = R"({"username": "john", "email": "john@test.com", "password": "pass123"})";
+    SimpleRequest req;
+    req.setMethod("POST");
+    req.setPath("/api/v1/auth/register");
+    req.setBody(R"({"username": "john", "email": "john@test.com", "password": "pass123"})");
     
-    MockResponse res;
+    SimpleResponse res;
     handler.handle(req, res);
 
-    EXPECT_EQ(res.status_, 201);
+    EXPECT_EQ(res.getStatus(), 201);
     
-    auto json = nlohmann::json::parse(res.body_);
+    auto json = nlohmann::json::parse(res.getBody());
     EXPECT_FALSE(json["user_id"].get<std::string>().empty());
     EXPECT_EQ(json["message"], "User registered successfully");
 }
@@ -118,25 +84,29 @@ TEST_F(AuthEndpointTest, RegisterHandler_Success) {
 TEST_F(AuthEndpointTest, RegisterHandler_MissingFields) {
     RegisterHandler handler(authService_);
     
-    MockRequest req;
-    req.body_ = R"({"username": "john"})";
+    SimpleRequest req;
+    req.setMethod("POST");
+    req.setPath("/api/v1/auth/register");
+    req.setBody(R"({"username": "john"})");
     
-    MockResponse res;
+    SimpleResponse res;
     handler.handle(req, res);
 
-    EXPECT_EQ(res.status_, 400);
+    EXPECT_EQ(res.getStatus(), 400);
 }
 
 TEST_F(AuthEndpointTest, RegisterHandler_InvalidJson) {
     RegisterHandler handler(authService_);
     
-    MockRequest req;
-    req.body_ = "not json";
+    SimpleRequest req;
+    req.setMethod("POST");
+    req.setPath("/api/v1/auth/register");
+    req.setBody("not json");
     
-    MockResponse res;
+    SimpleResponse res;
     handler.handle(req, res);
 
-    EXPECT_EQ(res.status_, 400);
+    EXPECT_EQ(res.getStatus(), 400);
 }
 
 // ============================================
@@ -149,15 +119,17 @@ TEST_F(AuthEndpointTest, LoginHandler_Success) {
     
     LoginHandler handler(authService_);
     
-    MockRequest req;
-    req.body_ = R"({"username": "john", "password": "pass123"})";
+    SimpleRequest req;
+    req.setMethod("POST");
+    req.setPath("/api/v1/auth/login");
+    req.setBody(R"({"username": "john", "password": "pass123"})");
     
-    MockResponse res;
+    SimpleResponse res;
     handler.handle(req, res);
 
-    EXPECT_EQ(res.status_, 200);
+    EXPECT_EQ(res.getStatus(), 200);
     
-    auto json = nlohmann::json::parse(res.body_);
+    auto json = nlohmann::json::parse(res.getBody());
     EXPECT_FALSE(json["session_token"].get<std::string>().empty());
     EXPECT_FALSE(json["user_id"].get<std::string>().empty());
 }
@@ -167,13 +139,15 @@ TEST_F(AuthEndpointTest, LoginHandler_WrongPassword) {
     
     LoginHandler handler(authService_);
     
-    MockRequest req;
-    req.body_ = R"({"username": "john", "password": "wrongpass"})";
+    SimpleRequest req;
+    req.setMethod("POST");
+    req.setPath("/api/v1/auth/login");
+    req.setBody(R"({"username": "john", "password": "wrongpass"})");
     
-    MockResponse res;
+    SimpleResponse res;
     handler.handle(req, res);
 
-    EXPECT_EQ(res.status_, 401);
+    EXPECT_EQ(res.getStatus(), 401);
 }
 
 // ============================================
@@ -186,15 +160,17 @@ TEST_F(AuthEndpointTest, ValidateTokenHandler_ValidSession) {
     
     ValidateTokenHandler handler(authService_);
     
-    MockRequest req;
-    req.body_ = R"({"token": ")" + loginResult.sessionToken + R"(", "type": "session"})";
+    SimpleRequest req;
+    req.setMethod("POST");
+    req.setPath("/api/v1/auth/validate");
+    req.setBody(R"({"token": ")" + loginResult.sessionToken + R"(", "type": "session"})");
     
-    MockResponse res;
+    SimpleResponse res;
     handler.handle(req, res);
 
-    EXPECT_EQ(res.status_, 200);
+    EXPECT_EQ(res.getStatus(), 200);
     
-    auto json = nlohmann::json::parse(res.body_);
+    auto json = nlohmann::json::parse(res.getBody());
     EXPECT_TRUE(json["valid"].get<bool>());
     EXPECT_EQ(json["user_id"], loginResult.userId);
 }
@@ -202,15 +178,17 @@ TEST_F(AuthEndpointTest, ValidateTokenHandler_ValidSession) {
 TEST_F(AuthEndpointTest, ValidateTokenHandler_InvalidToken) {
     ValidateTokenHandler handler(authService_);
     
-    MockRequest req;
-    req.body_ = R"({"token": "invalid-token"})";
+    SimpleRequest req;
+    req.setMethod("POST");
+    req.setPath("/api/v1/auth/validate");
+    req.setBody(R"({"token": "invalid-token"})");
     
-    MockResponse res;
+    SimpleResponse res;
     handler.handle(req, res);
 
-    EXPECT_EQ(res.status_, 200);
+    EXPECT_EQ(res.getStatus(), 200);
     
-    auto json = nlohmann::json::parse(res.body_);
+    auto json = nlohmann::json::parse(res.getBody());
     EXPECT_FALSE(json["valid"].get<bool>());
 }
 
@@ -228,15 +206,17 @@ TEST_F(AuthEndpointTest, GetAccountsHandler_Success) {
     
     GetAccountsHandler handler(authService_, accountService_);
     
-    MockRequest req;
-    req.headers_["Authorization"] = "Bearer " + loginResult.sessionToken;
+    SimpleRequest req;
+    req.setMethod("GET");
+    req.setPath("/api/v1/accounts");
+    req.setHeader("Authorization", "Bearer " + loginResult.sessionToken);
     
-    MockResponse res;
+    SimpleResponse res;
     handler.handle(req, res);
 
-    EXPECT_EQ(res.status_, 200);
+    EXPECT_EQ(res.getStatus(), 200);
     
-    auto json = nlohmann::json::parse(res.body_);
+    auto json = nlohmann::json::parse(res.getBody());
     EXPECT_EQ(json["accounts"].size(), 1);
     EXPECT_EQ(json["accounts"][0]["name"], "Test");
 }
@@ -244,13 +224,15 @@ TEST_F(AuthEndpointTest, GetAccountsHandler_Success) {
 TEST_F(AuthEndpointTest, GetAccountsHandler_Unauthorized) {
     GetAccountsHandler handler(authService_, accountService_);
     
-    MockRequest req;
+    SimpleRequest req;
+    req.setMethod("GET");
+    req.setPath("/api/v1/accounts");
     // No Authorization header
     
-    MockResponse res;
+    SimpleResponse res;
     handler.handle(req, res);
 
-    EXPECT_EQ(res.status_, 401);
+    EXPECT_EQ(res.getStatus(), 401);
 }
 
 // ============================================
@@ -263,16 +245,83 @@ TEST_F(AuthEndpointTest, AddAccountHandler_Success) {
     
     AddAccountHandler handler(authService_, accountService_);
     
-    MockRequest req;
-    req.headers_["Authorization"] = "Bearer " + loginResult.sessionToken;
-    req.body_ = R"({"name": "My Sandbox", "type": "SANDBOX", "tinkoff_token": "fake-token"})";
+    SimpleRequest req;
+    req.setMethod("POST");
+    req.setPath("/api/v1/accounts");
+    req.setHeader("Authorization", "Bearer " + loginResult.sessionToken);
+    req.setHeader("Content-Type", "application/json");
+    req.setBody(R"({"name": "My Sandbox", "type": "SANDBOX", "tinkoff_token": "fake-token"})");
     
-    MockResponse res;
+    SimpleResponse res;
     handler.handle(req, res);
 
-    EXPECT_EQ(res.status_, 201);
+    EXPECT_EQ(res.getStatus(), 201);
     
-    auto json = nlohmann::json::parse(res.body_);
+    auto json = nlohmann::json::parse(res.getBody());
     EXPECT_EQ(json["name"], "My Sandbox");
     EXPECT_EQ(json["type"], "SANDBOX");
+}
+
+// ============================================
+// ДОПОЛНИТЕЛЬНЫЕ ТЕСТЫ С НОВЫМ API v0.1.0
+// ============================================
+
+TEST_F(AuthEndpointTest, GetAccountsHandler_VerifyBearerTokenExtraction) {
+    // Этот тест демонстрирует использование нового getBearerToken()
+    authService_->registerUser("john", "john@test.com", "pass123");
+    auto loginResult = authService_->login("john", "pass123");
+    
+    SimpleRequest req;
+    req.setHeader("Authorization", "Bearer " + loginResult.sessionToken);
+    
+    // Проверяем, что getBearerToken() корректно извлекает токен
+    auto token = req.getBearerToken();
+    ASSERT_TRUE(token.has_value());
+    EXPECT_EQ(*token, loginResult.sessionToken);
+}
+
+TEST_F(AuthEndpointTest, AddAccountHandler_VerifyJsonContentType) {
+    // Этот тест демонстрирует использование нового isJson()
+    SimpleRequest req;
+    req.setHeader("Content-Type", "application/json");
+    req.setBody(R"({"name": "Test"})");
+    
+    EXPECT_TRUE(req.isJson());
+    
+    // Также работает с charset
+    req.setHeader("Content-Type", "application/json; charset=utf-8");
+    EXPECT_TRUE(req.isJson());
+}
+
+TEST_F(AuthEndpointTest, Response_UseSetResult) {
+    // Демонстрация нового convenience метода setResult()
+    SimpleResponse res;
+    
+    res.setResult(201, "application/json", R"({"status": "created"})");
+    
+    EXPECT_EQ(res.getStatus(), 201);
+    EXPECT_EQ(res.getBody(), R"({"status": "created"})");
+    
+    auto contentType = res.getHeader("Content-Type");
+    ASSERT_TRUE(contentType.has_value());
+    EXPECT_EQ(*contentType, "application/json");
+}
+
+TEST_F(AuthEndpointTest, Request_CaseInsensitiveHeaders) {
+    // Демонстрация case-insensitive доступа к заголовкам
+    SimpleRequest req;
+    req.setHeader("Authorization", "Bearer token123");
+    
+    // Все варианты должны работать
+    auto h1 = req.getHeader("Authorization");
+    auto h2 = req.getHeader("authorization");
+    auto h3 = req.getHeader("AUTHORIZATION");
+    
+    ASSERT_TRUE(h1.has_value());
+    ASSERT_TRUE(h2.has_value());
+    ASSERT_TRUE(h3.has_value());
+    
+    EXPECT_EQ(*h1, "Bearer token123");
+    EXPECT_EQ(*h2, "Bearer token123");
+    EXPECT_EQ(*h3, "Bearer token123");
 }

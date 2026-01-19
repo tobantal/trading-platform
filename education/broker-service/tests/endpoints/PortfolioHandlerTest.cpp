@@ -9,8 +9,8 @@
 #include "adapters/primary/PortfolioHandler.hpp"
 #include "ports/output/IBrokerGateway.hpp"
 
-#include <IRequest.hpp>
-#include <IResponse.hpp>
+#include <SimpleRequest.hpp>
+#include <SimpleResponse.hpp>
 #include <nlohmann/json.hpp>
 
 using namespace broker;
@@ -18,92 +18,6 @@ using namespace broker::adapters::primary;
 using ::testing::Return;
 using ::testing::Throw;
 using ::testing::_;
-
-
-// ============================================================================
-// TestRequest - ведёт себя как BeastRequestAdapter
-// ============================================================================
-
-class TestRequest : public IRequest {
-public:
-    TestRequest(const std::string& method, const std::string& fullPath,
-                const std::string& body = "")
-        : method_(method), body_(body)
-    {
-        // Парсим path и params как BeastRequestAdapter
-        auto pos = fullPath.find('?');
-        if (pos == std::string::npos) {
-            path_ = fullPath;
-        } else {
-            path_ = fullPath.substr(0, pos);
-            parseQueryString(fullPath.substr(pos + 1));
-        }
-    }
-
-    std::string getPath() const override { return path_; }
-    std::string getMethod() const override { return method_; }
-    std::string getBody() const override { return body_; }
-    std::string getIp() const override { return "127.0.0.1"; }
-    int getPort() const override { return 8080; }
-    std::map<std::string, std::string> getParams() const override { return params_; }
-    std::map<std::string, std::string> getHeaders() const override { return headers_; }
-
-    void setHeader(const std::string& name, const std::string& value) {
-        headers_[name] = value;
-    }
-
-private:
-    void parseQueryString(const std::string& query) {
-        size_t start = 0;
-        while (start < query.size()) {
-            auto eq = query.find('=', start);
-            auto amp = query.find('&', start);
-            if (eq == std::string::npos) break;
-
-            std::string key = query.substr(start, eq - start);
-            std::string value = (amp == std::string::npos)
-                ? query.substr(eq + 1)
-                : query.substr(eq + 1, amp - eq - 1);
-
-            if (!key.empty()) {
-                params_[key] = value;
-            }
-
-            if (amp == std::string::npos) break;
-            start = amp + 1;
-        }
-    }
-
-    std::string method_;
-    std::string path_;
-    std::string body_;
-    std::map<std::string, std::string> params_;
-    std::map<std::string, std::string> headers_;
-};
-
-
-// ============================================================================
-// TestResponse
-// ============================================================================
-
-class TestResponse : public IResponse {
-public:
-    void setStatus(int code) override { status_ = code; }
-    void setBody(const std::string& body) override { body_ = body; }
-    void setHeader(const std::string& name, const std::string& value) override {
-        headers_[name] = value;
-    }
-
-    int getStatus() const { return status_; }
-    std::string getBody() const { return body_; }
-    std::map<std::string, std::string> getHeaders() const { return headers_; }
-
-private:
-    int status_ = 0;
-    std::string body_;
-    std::map<std::string, std::string> headers_;
-};
-
 
 // ============================================================================
 // Mock для IBrokerGateway
@@ -123,11 +37,10 @@ public:
     MOCK_METHOD(bool, cancelOrder, (const std::string&, const std::string&), (override));
     MOCK_METHOD(std::optional<domain::Order>, getOrderStatus, (const std::string&, const std::string&), (override));
     MOCK_METHOD(std::vector<domain::Order>, getOrders, (const std::string&), (override));
-    MOCK_METHOD((std::vector<domain::Order>), getOrderHistory, 
+    MOCK_METHOD((std::vector<domain::Order>), getOrderHistory,
                 (const std::string&, const std::optional<std::chrono::system_clock::time_point>&,
                  const std::optional<std::chrono::system_clock::time_point>&), (override));
 };
-
 
 // ============================================================================
 // Тестовый класс
@@ -138,6 +51,27 @@ protected:
     void SetUp() override {
         mockBroker_ = std::make_shared<MockBrokerGateway>();
         handler_ = std::make_unique<PortfolioHandler>(mockBroker_);
+    }
+
+    /**
+     * @brief Хелпер для создания запроса с парсингом query string
+     */
+    SimpleRequest createRequest(const std::string& method, 
+                                 const std::string& fullPath,
+                                 const std::string& body = "") {
+        SimpleRequest req;
+        req.setMethod(method);
+        req.setBody(body);
+        
+        auto pos = fullPath.find('?');
+        if (pos == std::string::npos) {
+            req.setPath(fullPath);
+        } else {
+            req.setPath(fullPath.substr(0, pos));
+            parseQueryString(req, fullPath.substr(pos + 1));
+        }
+        
+        return req;
     }
 
     domain::Portfolio createTestPortfolio(const std::string& accountId, double cash) {
@@ -154,8 +88,29 @@ protected:
 
     std::shared_ptr<MockBrokerGateway> mockBroker_;
     std::unique_ptr<PortfolioHandler> handler_;
-};
 
+private:
+    void parseQueryString(SimpleRequest& req, const std::string& query) {
+        size_t start = 0;
+        while (start < query.size()) {
+            auto eq = query.find('=', start);
+            auto amp = query.find('&', start);
+            if (eq == std::string::npos) break;
+
+            std::string key = query.substr(start, eq - start);
+            std::string value = (amp == std::string::npos)
+                ? query.substr(eq + 1)
+                : query.substr(eq + 1, amp - eq - 1);
+
+            if (!key.empty()) {
+                req.setQueryParam(key, value);
+            }
+
+            if (amp == std::string::npos) break;
+            start = amp + 1;
+        }
+    }
+};
 
 // ============================================================================
 // ТЕСТЫ: GET /api/v1/portfolio
@@ -168,8 +123,8 @@ TEST_F(PortfolioHandlerTest, GetPortfolio_ExistingAccount_Returns200) {
         .Times(1)
         .WillOnce(Return(portfolio));
 
-    TestRequest req("GET", "/api/v1/portfolio?account_id=acc-001-sandbox");
-    TestResponse res;
+    auto req = createRequest("GET", "/api/v1/portfolio?account_id=acc-001-sandbox");
+    SimpleResponse res;
     
     handler_->handle(req, res);
     
@@ -186,8 +141,8 @@ TEST_F(PortfolioHandlerTest, GetPortfolio_NonSandboxAccount_Returns404) {
         .Times(1)
         .WillOnce(Throw(std::runtime_error("Account not found")));
 
-    TestRequest req("GET", "/api/v1/portfolio?account_id=unknown-real-account");
-    TestResponse res;
+    auto req = createRequest("GET", "/api/v1/portfolio?account_id=unknown-real-account");
+    SimpleResponse res;
     
     handler_->handle(req, res);
     
@@ -195,8 +150,8 @@ TEST_F(PortfolioHandlerTest, GetPortfolio_NonSandboxAccount_Returns404) {
 }
 
 TEST_F(PortfolioHandlerTest, GetPortfolio_MissingAccountId_Returns400) {
-    TestRequest req("GET", "/api/v1/portfolio");
-    TestResponse res;
+    auto req = createRequest("GET", "/api/v1/portfolio");
+    SimpleResponse res;
     
     handler_->handle(req, res);
     
@@ -205,7 +160,6 @@ TEST_F(PortfolioHandlerTest, GetPortfolio_MissingAccountId_Returns400) {
     auto json = parseJson(res.getBody());
     EXPECT_TRUE(json.contains("error"));
 }
-
 
 // ============================================================================
 // ТЕСТЫ: GET /api/v1/portfolio/positions
@@ -230,8 +184,8 @@ TEST_F(PortfolioHandlerTest, GetPositions_ReturnsArray) {
         .Times(1)
         .WillOnce(Return(portfolio));
 
-    TestRequest req("GET", "/api/v1/portfolio/positions?account_id=acc-001-sandbox");
-    TestResponse res;
+    auto req = createRequest("GET", "/api/v1/portfolio/positions?account_id=acc-001-sandbox");
+    SimpleResponse res;
     
     handler_->handle(req, res);
     
@@ -244,7 +198,6 @@ TEST_F(PortfolioHandlerTest, GetPositions_ReturnsArray) {
     EXPECT_EQ(json[0]["ticker"], "SBER");
 }
 
-
 // ============================================================================
 // ТЕСТЫ: GET /api/v1/portfolio/cash
 // ============================================================================
@@ -256,8 +209,8 @@ TEST_F(PortfolioHandlerTest, GetCash_ReturnsUnitsFormat) {
         .Times(1)
         .WillOnce(Return(portfolio));
 
-    TestRequest req("GET", "/api/v1/portfolio/cash?account_id=acc-001-sandbox");
-    TestResponse res;
+    auto req = createRequest("GET", "/api/v1/portfolio/cash?account_id=acc-001-sandbox");
+    SimpleResponse res;
     
     handler_->handle(req, res);
     
@@ -270,14 +223,13 @@ TEST_F(PortfolioHandlerTest, GetCash_ReturnsUnitsFormat) {
     EXPECT_EQ(json["currency"], "RUB");
 }
 
-
 // ============================================================================
 // ТЕСТЫ: Неизвестные пути
 // ============================================================================
 
 TEST_F(PortfolioHandlerTest, UnknownPath_Returns404) {
-    TestRequest req("GET", "/api/v1/portfolio/unknown?account_id=acc-001-sandbox");
-    TestResponse res;
+    auto req = createRequest("GET", "/api/v1/portfolio/unknown?account_id=acc-001-sandbox");
+    SimpleResponse res;
     
     handler_->handle(req, res);
     

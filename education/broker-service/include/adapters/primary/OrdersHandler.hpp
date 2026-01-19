@@ -60,20 +60,17 @@ private:
     std::shared_ptr<ports::output::IBrokerGateway> broker_;
 
     void handleGet(IRequest& req, IResponse& res, const std::string& path, const std::string& basePath) {
-        auto params = req.getParams();
-        auto it = params.find("account_id");
+        std::string accountId = req.getQueryParam("account_id").value_or("");
         
-        if (it == params.end() || it->second.empty()) {
+        if (accountId.empty()) {
             sendError(res, 400, "Parameter 'account_id' is required");
             return;
         }
         
-        std::string accountId = it->second;
-        
         if (path == basePath) {
             handleGetOrders(res, accountId);
         } else if (path.find(basePath + "/") == 0) {
-            std::string orderId = extractOrderId(path, basePath);
+            std::string orderId = req.getPathParam(0).value_or("");
             
             if (orderId.empty()) {
                 handleGetOrders(res, accountId);
@@ -97,9 +94,7 @@ private:
             response.push_back(orderToJson(order));
         }
         
-        res.setStatus(200);
-        res.setHeader("Content-Type", "application/json");
-        res.setBody(response.dump());
+        res.setResult(200, "application/json", response.dump());
     }
 
     /**
@@ -113,9 +108,7 @@ private:
             return;
         }
         
-        res.setStatus(200);
-        res.setHeader("Content-Type", "application/json");
-        res.setBody(orderToJson(*orderOpt).dump());
+        res.setResult(200, "application/json", orderToJson(*orderOpt).dump());
     }
 
     std::string extractOrderId(const std::string& path, const std::string& basePath) {
@@ -152,9 +145,7 @@ private:
         nlohmann::json error;
         error["error"] = message;
         
-        res.setStatus(status);
-        res.setHeader("Content-Type", "application/json");
-        res.setBody(error.dump());
+        res.setResult(status, "application/json", error.dump());
     }
 };
 

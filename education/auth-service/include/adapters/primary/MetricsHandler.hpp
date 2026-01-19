@@ -25,12 +25,10 @@ public:
         oss << "# TYPE http_requests_total counter\n";
         oss << "http_requests_total{service=\"auth\"} " << requestsTotal_.load() << "\n";
 
-        res.setStatus(200);
-        res.setHeader("Content-Type", "text/plain; charset=utf-8");
-        res.setBody(oss.str());
+        res.setResult(200, "text/plain; charset=utf-8", oss.str());
     }
 
-    void incrementRequests() { requestsTotal_++; }
+    void incrementRequests() { ++requestsTotal_; }
 
 private:
     std::chrono::steady_clock::time_point startTime_;

@@ -10,38 +10,6 @@
 namespace trading::adapters::primary
 {
 
-    // Wrapper для перехвата статуса и тела ответа
-    class ResponseCapture : public IResponse
-    {
-    public:
-        explicit ResponseCapture(IResponse &inner) : inner_(inner) {}
-
-        void setStatus(int code) override
-        {
-            status_ = code;
-            inner_.setStatus(code);
-        }
-
-        void setBody(const std::string &body) override
-        {
-            body_ = body;
-            inner_.setBody(body);
-        }
-
-        void setHeader(const std::string &name, const std::string &value) override
-        {
-            inner_.setHeader(name, value);
-        }
-
-        int getStatus() const { return status_; }
-        std::string getBody() const { return body_; }
-
-    private:
-        IResponse &inner_;
-        int status_ = 0;
-        std::string body_;
-    };
-
     class IdempotentHandler : public IHttpHandler
     {
     public:
@@ -54,15 +22,8 @@ namespace trading::adapters::primary
 
         void handle(IRequest &req, IResponse &res) override
         {
-            auto headers = req.getHeaders();
-            std::string key;
-
-            // Ищем X-Idempotency-Key в заголовках
-            auto it = headers.find("X-Idempotency-Key");
-            if (it != headers.end())
-            {
-                key = it->second;
-            }
+            // Ищем X-Idempotency-Key
+            std::string key = req.getHeader("X-Idempotency-Key").value_or("");
 
             // Только для POST и DELETE, если есть ключ
             if ((req.getMethod() == "POST" || req.getMethod() == "DELETE") && !key.empty())
@@ -74,23 +35,18 @@ namespace trading::adapters::primary
                 if (cached)
                 {
                     std::cout << "[IdempotentHandler] Cache HIT for key: " << key << std::endl;
-                    res.setStatus(cached->status);
-                    res.setBody(cached->body);
-                    res.setHeader("Content-Type", "application/json");
                     res.setHeader("X-Idempotency-Key-Used", "true");
+                    res.setResult(cached->status, "application/json", cached->body);
                     return;
                 }
 
                 std::cout << "[IdempotentHandler] Cache MISS for key: " << key << std::endl;
-
-                // Выполняем оригинальный хэндлер с перехватом ответа
-                ResponseCapture capture(res);
-                inner_->handle(req, capture);
+                inner_->handle(req, res);
 
                 // Сохраняем результат (только успешные)
-                if (capture.getStatus() >= 200 && capture.getStatus() < 300)
+                if (res.getStatus() >= 200 && res.getStatus() < 300)
                 {
-                    repo_->save(key, capture.getStatus(), capture.getBody());
+                    repo_->save(key, res.getStatus(), res.getBody());
                 }
             }
             else

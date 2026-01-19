@@ -92,7 +92,7 @@ public:
     /**
      * @brief Запустить прослушивание
      * 
-     * ВАЖНО: Вызывайте ПОСЛЕ того как все subscribe() сделаны!
+     * ВАЖНО: Вызываем ПОСЛЕ того как все subscribe() сделаны!
      */
     void start() override {
         if (running_) return;
