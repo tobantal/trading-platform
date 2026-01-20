@@ -1,7 +1,7 @@
 // trading-service/include/application/TradingEventHandler.hpp
 #pragma once
 
-#include "ports/output/IEventConsumer.hpp"
+#include "ports/input/IEventConsumer.hpp"
 #include <nlohmann/json.hpp>
 #include <memory>
 #include <iostream>
@@ -46,7 +46,7 @@ public:
     using QuoteUpdateCallback = std::function<void(const QuoteUpdate&)>;
     using PortfolioUpdateCallback = std::function<void(const std::string&, const nlohmann::json&)>;
 
-    explicit TradingEventHandler(std::shared_ptr<ports::output::IEventConsumer> eventConsumer)
+    explicit TradingEventHandler(std::shared_ptr<ports::input::IEventConsumer> eventConsumer)
         : eventConsumer_(std::move(eventConsumer))
     {
         std::cout << "[TradingEventHandler] Created" << std::endl;
@@ -151,7 +151,7 @@ private:
         if (portfolioCallback_) portfolioCallback_(accountId, json);
     }
 
-    std::shared_ptr<ports::output::IEventConsumer> eventConsumer_;
+    std::shared_ptr<ports::input::IEventConsumer> eventConsumer_;
     OrderUpdateCallback orderCallback_;
     QuoteUpdateCallback quoteCallback_;
     PortfolioUpdateCallback portfolioCallback_;

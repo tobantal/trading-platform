@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ports/input/IMetricsService.hpp"
-#include "ports/output/IEventConsumer.hpp"
+#include "ports/input/IEventConsumer.hpp"
 
 #include <memory>
 #include <string>
@@ -13,13 +13,12 @@ namespace trading::adapters::primary
     /**
      * @brief Слушатель всех событий RabbitMQ для сбора метрик
      *
-     * ... (документация без изменений)
      */
     class AllEventsListener
     {
     public:
         AllEventsListener(
-            std::shared_ptr<ports::output::IEventConsumer> consumer, // <-- output, не input
+            std::shared_ptr<ports::input::IEventConsumer> consumer,
             std::shared_ptr<ports::input::IMetricsService> metrics) : consumer_(std::move(consumer)), metrics_(std::move(metrics))
         {
             std::cout << "[AllEventsListener] Initializing..." << std::endl;
@@ -48,7 +47,7 @@ namespace trading::adapters::primary
         }
 
     private:
-        std::shared_ptr<ports::output::IEventConsumer> consumer_; // <-- output, не input
+        std::shared_ptr<ports::input::IEventConsumer> consumer_; // <-- output, не input
         std::shared_ptr<ports::input::IMetricsService> metrics_;
 
         void onEvent(const std::string &routingKey, const std::string &message)

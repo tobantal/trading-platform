@@ -47,14 +47,9 @@ if(BUILD_TESTS)
     # НЕ вызываем enable_testing() - уже вызван в root
     # НЕ загружаем GoogleTest - уже загружен в education/CMakeLists.txt
     
-    set(TRADING_TEST_SOURCES
-        tests/adapters/CachedBrokerGatewayTest.cpp
-        tests/adapters/OrderHandlerTest.cpp
-        tests/adapters/HttpBrokerGatewayTest.cpp
-        tests/application/OrderServiceTest.cpp
-        tests/application/MarketServiceTest.cpp
-        tests/application/PortfolioServiceTest.cpp
-        tests/endpoints/MarketHandlerTest.cpp
+    file(GLOB_RECURSE TRADING_TEST_SOURCES
+        CONFIGURE_DEPENDS
+        tests/*.cpp
     )
     
     add_executable(trading-service-tests ${TRADING_TEST_SOURCES})

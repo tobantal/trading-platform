@@ -21,7 +21,7 @@
 #include "ports/output/IBrokerGateway.hpp"
 #include "ports/output/IAuthClient.hpp"
 #include "ports/output/IEventPublisher.hpp"
-#include "ports/output/IEventConsumer.hpp"
+#include "ports/input/IEventConsumer.hpp"
 #include "ports/output/IIdempotencyRepository.hpp"
 
 // Application
@@ -40,13 +40,27 @@
 
 // Primary Adapters
 #include "adapters/primary/HealthHandler.hpp"
-#include "adapters/primary/MarketHandler.hpp"
-#include "adapters/primary/OrderHandler.hpp"
-#include "adapters/primary/PortfolioHandler.hpp"
-#include "adapters/primary/IdempotentHandler.hpp"
 #include "adapters/primary/MetricsHandler.hpp"
+
+#include "adapters/primary/IdempotentHandler.hpp"
+
 #include "adapters/primary/MetricsDecoratorHandler.hpp"
 #include "adapters/primary/AllEventsListener.hpp"
+
+#include "adapters/primary/GetQuotesHandler.hpp"
+#include "adapters/primary/GetAllInstrumentsHandler.hpp"
+#include "adapters/primary/SearchInstrumentsHandler.hpp"
+#include "adapters/primary/GetInstrumentByFigiHandler.hpp"
+
+#include "adapters/primary/GetPortfolioHandler.hpp"
+#include "adapters/primary/GetPositionsHandler.hpp"
+#include "adapters/primary/GetCashHandler.hpp"
+
+#include "adapters/primary/CreateOrderHandler.hpp"
+#include "adapters/primary/GetOrdersHandler.hpp"
+#include "adapters/primary/GetOrderHandler.hpp"
+#include "adapters/primary/CancelOrderHandler.hpp"
+
 
 #include <iostream>
 #include <memory>
@@ -108,7 +122,7 @@ namespace trading
 
                 // RabbitMQ
                 di::bind<ports::output::IEventPublisher>().to(rabbitMQAdapter),
-                di::bind<ports::output::IEventConsumer>().to(rabbitMQAdapter),
+                di::bind<ports::input::IEventConsumer>().to(rabbitMQAdapter),
 
                 // Services
                 di::bind<ports::input::IMetricsService>().to<application::MetricsService>().in(di::singleton),
@@ -119,7 +133,13 @@ namespace trading
             // Шаг 3: Получаем MetricsService для декораторов
             auto metricsService = injector.create<std::shared_ptr<ports::input::IMetricsService>>();
 
+
             // Шаг 4: HTTP Handlers
+
+            // FIXME: нужно MetricsDecoratorHandler регистрировать как декоратор в самом конце.
+            // Вначале регистриуем все хэдлеры стандартно без декорации.
+            // Потом выборончые хэндлеры оборачиваем в IdempotentHandler так. Вначале getHandlerByKey(), потом оборачиваем и снова put уже декорированный хэндлер.
+            // MetricsDecoratorHandler по той же логике вконце оборачивает, только все хэндлеры по итератору.
 
             // Health (с метриками)
             auto healthHandler = injector.create<std::shared_ptr<adapters::primary::HealthHandler>>();
@@ -131,28 +151,49 @@ namespace trading
                 injector.create<std::shared_ptr<adapters::primary::MetricsHandler>>();
 
             // Market (с метриками)
-            auto marketHandler = injector.create<std::shared_ptr<adapters::primary::MarketHandler>>();
-            auto wrappedMarketHandler = std::make_shared<adapters::primary::MetricsDecoratorHandler>(marketHandler, metricsService);
-            handlers_[getHandlerKey("GET", "/api/v1/instruments")] = wrappedMarketHandler;
-            handlers_[getHandlerKey("GET", "/api/v1/instruments/*")] = wrappedMarketHandler;
-            handlers_[getHandlerKey("GET", "/api/v1/quotes")] = wrappedMarketHandler;
+            auto getQuotesHandler = injector.create<std::shared_ptr<adapters::primary::GetQuotesHandler>>();
+            auto getAllInstrumentsHandler = injector.create<std::shared_ptr<adapters::primary::GetAllInstrumentsHandler>>();
+            auto searchInstrumentsHandler = injector.create<std::shared_ptr<adapters::primary::SearchInstrumentsHandler>>();
+            auto getInstrumentByFigiHandler = injector.create<std::shared_ptr<adapters::primary::GetInstrumentByFigiHandler>>();
+
+            handlers_[getHandlerKey("GET", "/api/v1/quotes")] = getQuotesHandler;
+            handlers_[getHandlerKey("GET", "/api/v1/instruments")] = getAllInstrumentsHandler;
+            handlers_[getHandlerKey("GET", "/api/v1/instruments/search")] = searchInstrumentsHandler;
+            handlers_[getHandlerKey("GET", "/api/v1/instruments/*")] = getInstrumentByFigiHandler;
 
             // Orders (с идемпотентностью и метриками)
-            auto orderHandler = injector.create<std::shared_ptr<adapters::primary::OrderHandler>>();
             auto idempotencyRepo = injector.create<std::shared_ptr<ports::output::IIdempotencyRepository>>();
-            auto idempotentOrderHandler = std::make_shared<adapters::primary::IdempotentHandler>(orderHandler, idempotencyRepo);
-            auto wrappedOrderHandler = std::make_shared<adapters::primary::MetricsDecoratorHandler>(idempotentOrderHandler, metricsService);
+            //auto idempotentOrderHandler = std::make_shared<adapters::primary::IdempotentHandler>(orderHandler, idempotencyRepo);
+            //auto wrappedOrderHandler = std::make_shared<adapters::primary::MetricsDecoratorHandler>(idempotentOrderHandler, metricsService);
 
-            handlers_[getHandlerKey("POST", "/api/v1/orders")] = wrappedOrderHandler;
-            handlers_[getHandlerKey("GET", "/api/v1/orders")] = wrappedOrderHandler;
-            handlers_[getHandlerKey("GET", "/api/v1/orders/*")] = wrappedOrderHandler;
-            handlers_[getHandlerKey("DELETE", "/api/v1/orders/*")] = wrappedOrderHandler;
+            auto createOrderHandler = injector.create<std::shared_ptr<adapters::primary::CreateOrderHandler>>();
+            auto getOrdersHandler = injector.create<std::shared_ptr<adapters::primary::GetOrdersHandler>>();
+            auto getOrderHandler = injector.create<std::shared_ptr<adapters::primary::GetOrderHandler>>();
+            auto cancelOrderHandler = injector.create<std::shared_ptr<adapters::primary::CancelOrderHandler>>();
+
+            handlers_[getHandlerKey("POST", "/api/v1/orders")] = createOrderHandler;
+            handlers_[getHandlerKey("GET", "/api/v1/orders")] = getOrdersHandler;
+            handlers_[getHandlerKey("GET", "/api/v1/orders/*")] = getOrderHandler;
+            handlers_[getHandlerKey("DELETE", "/api/v1/orders/*")] = cancelOrderHandler;
 
             // Portfolio (с метриками)
-            auto portfolioHandler = injector.create<std::shared_ptr<adapters::primary::PortfolioHandler>>();
-            auto wrappedPortfolioHandler = std::make_shared<adapters::primary::MetricsDecoratorHandler>(portfolioHandler, metricsService);
-            handlers_[getHandlerKey("GET", "/api/v1/portfolio")] = wrappedPortfolioHandler;
-            handlers_[getHandlerKey("GET", "/api/v1/portfolio/*")] = wrappedPortfolioHandler;
+            auto getPortfolioHandler = injector.create<std::shared_ptr<adapters::primary::GetPortfolioHandler>>();
+            auto getPositionsHandler = injector.create<std::shared_ptr<adapters::primary::GetPositionsHandler>>();
+            auto getCashHandler = injector.create<std::shared_ptr<adapters::primary::GetCashHandler>>();
+
+            handlers_[getHandlerKey("GET", "/api/v1/portfolio")] = getPortfolioHandler;
+            handlers_[getHandlerKey("GET", "/api/v1/portfolio/positions")] = getPositionsHandler;
+            handlers_[getHandlerKey("GET", "/api/v1/portfolio/cash")] = getCashHandler;
+
+            // TODO: тут должен быть этап оберток.
+            
+            // Только orders декорируются IdempotentHandler.
+            // handlers_[KEY] = std::make_shared<adapters::primary::IdempotentHandler>(HANDLER, idempotencyRepo);
+
+            // Все хэндлеры (кроме MetricsHandler) декорируются MetricsDecoratorHandler.
+            // handlers_[KEY] = std::make_shared<adapters::primary::MetricsDecoratorHandler>(HANDLER, metricsService);
+
+            // Предлагаю создать метод, который принимает список ключей KEY и лямбду-функцию IHttpHandler -> IHttpHandler
 
             // Шаг 5: Event Handlers
             auto tradingEventHandler = injector.create<std::shared_ptr<application::TradingEventHandler>>();

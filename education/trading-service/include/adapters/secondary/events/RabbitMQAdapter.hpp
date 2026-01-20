@@ -2,7 +2,7 @@
 #pragma once
 
 #include "ports/output/IEventPublisher.hpp"
-#include "ports/output/IEventConsumer.hpp"
+#include "ports/input/IEventConsumer.hpp"
 #include "settings/RabbitMQSettings.hpp"
 #include <amqpcpp.h>
 #include <amqpcpp/libboostasio.h>
@@ -27,7 +27,7 @@ namespace trading::adapters::secondary {
  * 3. Вызвать start() для запуска подключения
  */
 class RabbitMQAdapter : public ports::output::IEventPublisher,
-                        public ports::output::IEventConsumer {
+                        public ports::input::IEventConsumer {
 public:
     explicit RabbitMQAdapter(std::shared_ptr<settings::RabbitMQSettings> settings)
         : settings_(std::move(settings))
@@ -71,7 +71,7 @@ public:
     // =========================================================================
     
     void subscribe(const std::vector<std::string>& routingKeys, 
-                   ports::output::EventHandler handler) override {
+                   ports::input::EventHandler handler) override {
         std::lock_guard<std::mutex> lock(handlersMutex_);
         
         for (const auto& key : routingKeys) {
@@ -206,7 +206,7 @@ private:
                 std::cout << "[RabbitMQAdapter] Received " << routingKey 
                           << " (" << body.size() << " bytes)" << std::endl;
                 
-                // Вызываем handlers
+                // Вызов обработчиков
                 std::lock_guard<std::mutex> lock(handlersMutex_);
                 auto it = handlers_.find(routingKey);
                 if (it != handlers_.end()) {
@@ -221,6 +221,7 @@ private:
                     std::cout << "[RabbitMQAdapter] No handler for: " << routingKey << std::endl;
                 }
                 
+                // ACK только ПОСЛЕ успешной обработки
                 channel_->ack(tag);
             })
             .onError([](const char* msg) {
@@ -245,7 +246,7 @@ private:
     std::thread workerThread_;
     
     std::mutex handlersMutex_;
-    std::unordered_map<std::string, std::vector<ports::output::EventHandler>> handlers_;
+    std::unordered_map<std::string, std::vector<ports::input::EventHandler>> handlers_;
     std::vector<std::string> pendingBindings_;
 };
 

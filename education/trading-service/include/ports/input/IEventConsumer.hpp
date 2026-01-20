@@ -1,11 +1,11 @@
-// include/ports/output/IEventConsumer.hpp
+// include/ports/input/IEventConsumer.hpp
 #pragma once
 
 #include <string>
 #include <vector>
 #include <functional>
 
-namespace trading::ports::output {
+namespace trading::ports::input {
 
 /**
  * @brief Тип обработчика событий
@@ -13,7 +13,7 @@ namespace trading::ports::output {
  * Принимает routingKey и message как строки.
  * 
  * @param routingKey Ключ маршрутизации события
- * @param message JSON-сообщение с данными события
+ * @param message JSON-сообщение с данными события FIXME: заменить на UObject
  */
 using EventHandler = std::function<void(const std::string& routingKey, const std::string& message)>;
 
@@ -57,4 +57,4 @@ public:
     virtual void stop() = 0;
 };
 
-} // namespace trading::ports::output
+} // namespace trading::ports::input
