@@ -10,7 +10,6 @@
 
 #include "adapters/primary/CreateOrderHandler.hpp"
 #include "ports/input/IOrderService.hpp"
-#include "ports/output/IAuthClient.hpp"
 
 #include <SimpleRequest.hpp>
 #include <SimpleResponse.hpp>
@@ -35,13 +34,6 @@ public:
     MOCK_METHOD(std::vector<domain::Order>, getAllOrders, (const std::string &), (override));
 };
 
-class MockAuthClient : public ports::output::IAuthClient
-{
-public:
-    MOCK_METHOD(ports::output::TokenValidationResult, validateAccessToken, (const std::string &), (override));
-    MOCK_METHOD(std::optional<std::string>, getAccountIdFromToken, (const std::string &), (override));
-};
-
 // ============================================================================
 // Test Fixture
 // ============================================================================
@@ -52,24 +44,22 @@ protected:
     void SetUp() override
     {
         mockOrderService_ = std::make_shared<MockOrderService>();
-        mockAuthClient_ = std::make_shared<MockAuthClient>();
-        handler_ = std::make_unique<CreateOrderHandler>(mockOrderService_, mockAuthClient_);
+        handler_ = std::make_unique<CreateOrderHandler>(mockOrderService_);
     }
 
     SimpleRequest createRequest(const std::string &method,
                                 const std::string &path,
                                 const std::string &body = "",
-                                const std::string &token = "")
+                                const std::string &accountId = ""
+                            )
     {
         SimpleRequest req;
+
+        req.setAttribute("accountId", accountId); // сичтаем, что уже пришел распрарсенный accountId согласно pipeline
+
         req.setMethod(method);
         req.setPath(path);
         req.setBody(body);
-
-        if (!token.empty())
-        {
-            req.setHeader("Authorization", "Bearer " + token);
-        }
 
         return req;
     }
@@ -98,7 +88,6 @@ protected:
     }
 
     std::shared_ptr<MockOrderService> mockOrderService_;
-    std::shared_ptr<MockAuthClient> mockAuthClient_;
     std::unique_ptr<CreateOrderHandler> handler_;
 };
 
@@ -108,9 +97,6 @@ protected:
 
 TEST_F(CreateOrderHandlerTest, ValidMarketOrder_Returns201)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("valid-token"))
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockOrderService_, placeOrder(_))
         .WillOnce(Return(createSuccessResult("ord-12345")));
 
@@ -121,7 +107,7 @@ TEST_F(CreateOrderHandlerTest, ValidMarketOrder_Returns201)
         "type": "MARKET"
     })";
 
-    auto req = createRequest("POST", "/api/v1/orders", body, "valid-token");
+    auto req = createRequest("POST", "/api/v1/orders", body, "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -135,9 +121,6 @@ TEST_F(CreateOrderHandlerTest, ValidMarketOrder_Returns201)
 
 TEST_F(CreateOrderHandlerTest, ValidLimitOrder_Returns201)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("valid-token"))
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockOrderService_, placeOrder(_))
         .WillOnce(Return(createSuccessResult("ord-12345")));
 
@@ -150,7 +133,7 @@ TEST_F(CreateOrderHandlerTest, ValidLimitOrder_Returns201)
         "currency": "RUB"
     })";
 
-    auto req = createRequest("POST", "/api/v1/orders", body, "valid-token");
+    auto req = createRequest("POST", "/api/v1/orders", body, "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -158,11 +141,27 @@ TEST_F(CreateOrderHandlerTest, ValidLimitOrder_Returns201)
     EXPECT_EQ(res.getStatus(), 201);
 }
 
+TEST_F(CreateOrderHandlerTest, NoAccountId_Returns500)
+{
+    std::string body = R"({
+        "figi": "BBG004730N88",
+        "quantity": 10,
+        "direction": "SELL",
+        "type": "LIMIT",
+        "price": 270.50,
+        "currency": "RUB"
+    })";
+
+    auto req = createRequest("POST", "/api/v1/orders", body, ""); // нет accounId, ошибка pipeline
+    SimpleResponse res;
+
+    handler_->handle(req, res);
+
+    EXPECT_EQ(res.getStatus(), 500);
+}
+
 TEST_F(CreateOrderHandlerTest, RejectedOrder_Returns400)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("valid-token"))
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockOrderService_, placeOrder(_))
         .WillOnce(Return(createRejectedResult()));
 
@@ -173,7 +172,7 @@ TEST_F(CreateOrderHandlerTest, RejectedOrder_Returns400)
         "type": "MARKET"
     })";
 
-    auto req = createRequest("POST", "/api/v1/orders", body, "valid-token");
+    auto req = createRequest("POST", "/api/v1/orders", body, "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -186,16 +185,13 @@ TEST_F(CreateOrderHandlerTest, RejectedOrder_Returns400)
 
 TEST_F(CreateOrderHandlerTest, MissingFigi_Returns400)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("valid-token"))
-        .WillOnce(Return("acc-001"));
-
     std::string body = R"({
         "quantity": 10,
         "direction": "BUY",
         "type": "MARKET"
     })";
 
-    auto req = createRequest("POST", "/api/v1/orders", body, "valid-token");
+    auto req = createRequest("POST", "/api/v1/orders", body, "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -208,9 +204,6 @@ TEST_F(CreateOrderHandlerTest, MissingFigi_Returns400)
 
 TEST_F(CreateOrderHandlerTest, ZeroQuantity_Returns400)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("valid-token"))
-        .WillOnce(Return("acc-001"));
-
     std::string body = R"({
         "figi": "BBG004730N88",
         "quantity": 0,
@@ -218,7 +211,7 @@ TEST_F(CreateOrderHandlerTest, ZeroQuantity_Returns400)
         "type": "MARKET"
     })";
 
-    auto req = createRequest("POST", "/api/v1/orders", body, "valid-token");
+    auto req = createRequest("POST", "/api/v1/orders", body, "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -231,10 +224,7 @@ TEST_F(CreateOrderHandlerTest, ZeroQuantity_Returns400)
 
 TEST_F(CreateOrderHandlerTest, InvalidJson_Returns400)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("valid-token"))
-        .WillOnce(Return("acc-001"));
-
-    auto req = createRequest("POST", "/api/v1/orders", "not json", "valid-token");
+    auto req = createRequest("POST", "/api/v1/orders", "not json", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -245,39 +235,9 @@ TEST_F(CreateOrderHandlerTest, InvalidJson_Returns400)
     EXPECT_TRUE(json["error"].get<std::string>().find("JSON") != std::string::npos);
 }
 
-TEST_F(CreateOrderHandlerTest, NoToken_Returns401)
-{
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken(""))
-        .WillOnce(Return(std::nullopt));
-
-    std::string body = R"({"figi": "BBG004730N88", "quantity": 10})";
-
-    auto req = createRequest("POST", "/api/v1/orders", body);
-    SimpleResponse res;
-
-    handler_->handle(req, res);
-
-    EXPECT_EQ(res.getStatus(), 401);
-}
-
-TEST_F(CreateOrderHandlerTest, InvalidToken_Returns401)
-{
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("invalid-token"))
-        .WillOnce(Return(std::nullopt));
-
-    std::string body = R"({"figi": "BBG004730N88", "quantity": 10})";
-
-    auto req = createRequest("POST", "/api/v1/orders", body, "invalid-token");
-    SimpleResponse res;
-
-    handler_->handle(req, res);
-
-    EXPECT_EQ(res.getStatus(), 401);
-}
-
 TEST_F(CreateOrderHandlerTest, GetMethod_Returns405)
 {
-    auto req = createRequest("GET", "/api/v1/orders", "", "valid-token");
+    auto req = createRequest("GET", "/api/v1/orders", "", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);

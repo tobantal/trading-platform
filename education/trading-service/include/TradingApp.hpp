@@ -63,6 +63,7 @@
 #include "adapters/primary/MetricsMiddleware.hpp"
 #include "adapters/primary/IdempotencyCacheReader.hpp"
 #include "adapters/primary/IdempotencyCacheWriter.hpp"
+#include "adapters/primary/AccountIdExtractorMiddleware.hpp"
 
 #include <iostream>
 #include <memory>
@@ -144,6 +145,7 @@ namespace trading
             auto metricsMiddleware = injector.create<std::shared_ptr<serverlib::MetricsMiddleware>>();
             auto idempotencyCacheReader = injector.create<std::shared_ptr<adapters::primary::IdempotencyCacheReader>>();
             auto idempotencyCacheWriter = injector.create<std::shared_ptr<adapters::primary::IdempotencyCacheWriter>>();
+            auto accountIdExtractorMiddleware = injector.create<std::shared_ptr<adapters::primary::AccountIdExtractorMiddleware>>();
 
             // Шаг 3: Получаем MetricsService для декораторов
             auto metricsService = injector.create<std::shared_ptr<ports::input::IMetricsService>>();
@@ -182,13 +184,13 @@ namespace trading
             auto cancelOrderHandler = injector.create<std::shared_ptr<adapters::primary::CancelOrderHandler>>();
 
             registerEndpoint("GET", "/api/v1/orders",
-                    metricsMiddleware, idempotencyCacheReader, getOrdersHandler, idempotencyCacheWriter);
+                    metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, getOrdersHandler, idempotencyCacheWriter);
             registerEndpoint("GET", "/api/v1/orders/*",
-                    metricsMiddleware, idempotencyCacheReader, getOrderHandler, idempotencyCacheWriter);
+                    metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, getOrderHandler, idempotencyCacheWriter);
             registerEndpoint("DELETE", "/api/v1/orders/*",
-                    metricsMiddleware, idempotencyCacheReader, cancelOrderHandler, idempotencyCacheWriter);
+                    metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, cancelOrderHandler, idempotencyCacheWriter);
             registerEndpoint("POST", "/api/v1/orders",
-                    metricsMiddleware, idempotencyCacheReader, createOrderHandler, idempotencyCacheWriter);
+                    metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, createOrderHandler, idempotencyCacheWriter);
 
             // Portfolio (с метриками)
             auto getPortfolioHandler = injector.create<std::shared_ptr<adapters::primary::GetPortfolioHandler>>();
