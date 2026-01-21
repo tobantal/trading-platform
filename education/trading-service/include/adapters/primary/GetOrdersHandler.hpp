@@ -2,7 +2,6 @@
 
 #include <IHttpHandler.hpp>
 #include "ports/input/IOrderService.hpp"
-#include "ports/output/IAuthClient.hpp"
 #include <nlohmann/json.hpp>
 #include <memory>
 #include <iostream>
@@ -10,17 +9,12 @@
 namespace trading::adapters::primary
 {
 
-    /**
-     * @brief GET /api/v1/orders — список ордеров
-     *
-     * Требует Access Token (содержит accountId).
-     */
     class GetOrdersHandler : public IHttpHandler
     {
     public:
-        GetOrdersHandler(
-            std::shared_ptr<ports::input::IOrderService> orderService,
-            std::shared_ptr<ports::output::IAuthClient> authClient) : orderService_(std::move(orderService)), authClient_(std::move(authClient))
+        explicit GetOrdersHandler(
+            std::shared_ptr<ports::input::IOrderService> orderService)
+            : orderService_(std::move(orderService))
         {
             std::cout << "[GetOrdersHandler] Created" << std::endl;
         }
@@ -33,16 +27,17 @@ namespace trading::adapters::primary
                 return;
             }
 
-            auto accountId = extractAccountId(req);
-            if (!accountId)
+            auto accountId = req.getAttribute("accountId").value_or("");
+            if (accountId.empty())
             {
-                sendError(res, 401, "Access token required. Use POST /api/v1/auth/select-account to get one.");
+                sendError(res, 500, "Internal server error");
+                std::cout << "[GetOrdersHandler] Error: accountId must not be null on this step." << std::endl;
                 return;
             }
 
             try
             {
-                auto orders = orderService_->getAllOrders(*accountId);
+                auto orders = orderService_->getAllOrders(accountId);
 
                 nlohmann::json response;
                 response["orders"] = nlohmann::json::array();
@@ -62,13 +57,6 @@ namespace trading::adapters::primary
 
     private:
         std::shared_ptr<ports::input::IOrderService> orderService_;
-        std::shared_ptr<ports::output::IAuthClient> authClient_;
-
-        std::optional<std::string> extractAccountId(IRequest &req)
-        {
-            std::string token = req.getBearerToken().value_or("");
-            return authClient_->getAccountIdFromToken(token);
-        }
 
         nlohmann::json orderToJson(const domain::Order &order)
         {

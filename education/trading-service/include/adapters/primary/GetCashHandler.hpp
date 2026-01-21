@@ -2,7 +2,6 @@
 
 #include <IHttpHandler.hpp>
 #include "ports/input/IPortfolioService.hpp"
-#include "ports/output/IAuthClient.hpp"
 #include <nlohmann/json.hpp>
 #include <memory>
 #include <iostream>
@@ -10,17 +9,12 @@
 namespace trading::adapters::primary
 {
 
-    /**
-     * @brief GET /api/v1/portfolio/cash — доступные средства
-     *
-     * Требует Access Token (содержит accountId).
-     */
     class GetCashHandler : public IHttpHandler
     {
     public:
-        GetCashHandler(
-            std::shared_ptr<ports::input::IPortfolioService> portfolioService,
-            std::shared_ptr<ports::output::IAuthClient> authClient) : portfolioService_(std::move(portfolioService)), authClient_(std::move(authClient))
+        explicit GetCashHandler(
+            std::shared_ptr<ports::input::IPortfolioService> portfolioService)
+            : portfolioService_(std::move(portfolioService))
         {
             std::cout << "[GetCashHandler] Created" << std::endl;
         }
@@ -33,16 +27,17 @@ namespace trading::adapters::primary
                 return;
             }
 
-            auto accountId = extractAccountId(req);
-            if (!accountId)
+            auto accountId = req.getAttribute("accountId").value_or("");
+            if (accountId.empty())
             {
-                sendError(res, 401, "Access token required. Use POST /api/v1/auth/select-account to get one.");
+                sendError(res, 500, "Internal server error");
+                std::cout << "[GetCashHandler] Error: accountId must not be null on this step." << std::endl;
                 return;
             }
 
             try
             {
-                auto cash = portfolioService_->getAvailableCash(*accountId);
+                auto cash = portfolioService_->getAvailableCash(accountId);
 
                 nlohmann::json response;
                 response["amount"] = cash.toDouble();
@@ -59,13 +54,6 @@ namespace trading::adapters::primary
 
     private:
         std::shared_ptr<ports::input::IPortfolioService> portfolioService_;
-        std::shared_ptr<ports::output::IAuthClient> authClient_;
-
-        std::optional<std::string> extractAccountId(IRequest &req)
-        {
-            std::string token = req.getBearerToken().value_or("");
-            return authClient_->getAccountIdFromToken(token);
-        }
 
         void sendError(IResponse &res, int status, const std::string &message)
         {

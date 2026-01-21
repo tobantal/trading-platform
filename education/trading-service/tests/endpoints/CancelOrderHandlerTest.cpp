@@ -10,7 +10,6 @@
 
 #include "adapters/primary/CancelOrderHandler.hpp"
 #include "ports/input/IOrderService.hpp"
-#include "ports/output/IAuthClient.hpp"
 
 #include <SimpleRequest.hpp>
 #include <SimpleResponse.hpp>
@@ -35,13 +34,6 @@ public:
     MOCK_METHOD(std::vector<domain::Order>, getAllOrders, (const std::string &), (override));
 };
 
-class MockAuthClient : public ports::output::IAuthClient
-{
-public:
-    MOCK_METHOD(ports::output::TokenValidationResult, validateAccessToken, (const std::string &), (override));
-    MOCK_METHOD(std::optional<std::string>, getAccountIdFromToken, (const std::string &), (override));
-};
-
 // ============================================================================
 // Test Fixture
 // ============================================================================
@@ -52,23 +44,18 @@ protected:
     void SetUp() override
     {
         mockOrderService_ = std::make_shared<MockOrderService>();
-        mockAuthClient_ = std::make_shared<MockAuthClient>();
-        handler_ = std::make_unique<CancelOrderHandler>(mockOrderService_, mockAuthClient_);
+        handler_ = std::make_unique<CancelOrderHandler>(mockOrderService_);
     }
 
     SimpleRequest createRequest(const std::string &method,
                                 const std::string &path,
-                                const std::string &token = "",
+                                const std::string &accountId = "",
                                 const std::string &pathPattern = "")
     {
         SimpleRequest req;
         req.setMethod(method);
         req.setPath(path);
-
-        if (!token.empty())
-        {
-            req.setHeader("Authorization", "Bearer " + token);
-        }
+        req.setAttribute("accountId", accountId);
 
         if (!pathPattern.empty())
         {
@@ -84,7 +71,6 @@ protected:
     }
 
     std::shared_ptr<MockOrderService> mockOrderService_;
-    std::shared_ptr<MockAuthClient> mockAuthClient_;
     std::unique_ptr<CancelOrderHandler> handler_;
 };
 
@@ -94,13 +80,10 @@ protected:
 
 TEST_F(CancelOrderHandlerTest, Success_Returns200)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("valid-token"))
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockOrderService_, cancelOrder("acc-001", "ord-12345"))
         .WillOnce(Return(true));
 
-    auto req = createRequest("DELETE", "/api/v1/orders/ord-12345", "valid-token", "/api/v1/orders/*");
+    auto req = createRequest("DELETE", "/api/v1/orders/ord-12345", "acc-001", "/api/v1/orders/*");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -114,13 +97,10 @@ TEST_F(CancelOrderHandlerTest, Success_Returns200)
 
 TEST_F(CancelOrderHandlerTest, CannotCancel_Returns400)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("valid-token"))
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockOrderService_, cancelOrder("acc-001", "ord-12345"))
         .WillOnce(Return(false));
 
-    auto req = createRequest("DELETE", "/api/v1/orders/ord-12345", "valid-token", "/api/v1/orders/*");
+    auto req = createRequest("DELETE", "/api/v1/orders/ord-12345", "acc-001", "/api/v1/orders/*");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -133,10 +113,7 @@ TEST_F(CancelOrderHandlerTest, CannotCancel_Returns400)
 
 TEST_F(CancelOrderHandlerTest, MissingOrderId_Returns400)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("valid-token"))
-        .WillOnce(Return("acc-001"));
-
-    auto req = createRequest("DELETE", "/api/v1/orders/", "valid-token");
+    auto req = createRequest("DELETE", "/api/v1/orders/", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -147,35 +124,19 @@ TEST_F(CancelOrderHandlerTest, MissingOrderId_Returns400)
     EXPECT_TRUE(json["error"].get<std::string>().find("Order ID") != std::string::npos);
 }
 
-TEST_F(CancelOrderHandlerTest, NoToken_Returns401)
+TEST_F(CancelOrderHandlerTest, NoAccountId_Returns500)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken(""))
-        .WillOnce(Return(std::nullopt));
-
     auto req = createRequest("DELETE", "/api/v1/orders/ord-12345", "", "/api/v1/orders/*");
     SimpleResponse res;
 
     handler_->handle(req, res);
 
-    EXPECT_EQ(res.getStatus(), 401);
-}
-
-TEST_F(CancelOrderHandlerTest, InvalidToken_Returns401)
-{
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("invalid-token"))
-        .WillOnce(Return(std::nullopt));
-
-    auto req = createRequest("DELETE", "/api/v1/orders/ord-12345", "invalid-token", "/api/v1/orders/*");
-    SimpleResponse res;
-
-    handler_->handle(req, res);
-
-    EXPECT_EQ(res.getStatus(), 401);
+    EXPECT_EQ(res.getStatus(), 500);
 }
 
 TEST_F(CancelOrderHandlerTest, GetMethod_Returns405)
 {
-    auto req = createRequest("GET", "/api/v1/orders/ord-12345", "valid-token");
+    auto req = createRequest("GET", "/api/v1/orders/ord-12345", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -185,7 +146,7 @@ TEST_F(CancelOrderHandlerTest, GetMethod_Returns405)
 
 TEST_F(CancelOrderHandlerTest, PostMethod_Returns405)
 {
-    auto req = createRequest("POST", "/api/v1/orders/ord-12345", "valid-token");
+    auto req = createRequest("POST", "/api/v1/orders/ord-12345", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -195,13 +156,10 @@ TEST_F(CancelOrderHandlerTest, PostMethod_Returns405)
 
 TEST_F(CancelOrderHandlerTest, ServiceThrows_Returns500)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken(_))
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockOrderService_, cancelOrder(_, _))
         .WillOnce(Throw(std::runtime_error("Service unavailable")));
 
-    auto req = createRequest("DELETE", "/api/v1/orders/ord-12345", "valid-token", "/api/v1/orders/*");
+    auto req = createRequest("DELETE", "/api/v1/orders/ord-12345", "acc-001", "/api/v1/orders/*");
     SimpleResponse res;
 
     handler_->handle(req, res);

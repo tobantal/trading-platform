@@ -10,7 +10,6 @@
 
 #include "adapters/primary/GetCashHandler.hpp"
 #include "ports/input/IPortfolioService.hpp"
-#include "ports/output/IAuthClient.hpp"
 
 #include <SimpleRequest.hpp>
 #include <SimpleResponse.hpp>
@@ -32,13 +31,6 @@ public:
     MOCK_METHOD(std::vector<domain::Position>, getPositions, (const std::string&), (override));
 };
 
-class MockAuthClient : public ports::output::IAuthClient
-{
-public:
-    MOCK_METHOD(ports::output::TokenValidationResult, validateAccessToken, (const std::string &), (override));
-    MOCK_METHOD(std::optional<std::string>, getAccountIdFromToken, (const std::string &), (override));
-};
-
 // ============================================================================
 // Test Fixture
 // ============================================================================
@@ -49,22 +41,17 @@ protected:
     void SetUp() override
     {
         mockPortfolioService_ = std::make_shared<MockPortfolioService>();
-        mockAuthClient_ = std::make_shared<MockAuthClient>();
-        handler_ = std::make_unique<GetCashHandler>(mockPortfolioService_, mockAuthClient_);
+        handler_ = std::make_unique<GetCashHandler>(mockPortfolioService_);
     }
 
     SimpleRequest createRequest(const std::string &method,
                                 const std::string &path,
-                                const std::string &token = "")
+                                const std::string &accountId = "")
     {
         SimpleRequest req;
         req.setMethod(method);
         req.setPath(path);
-
-        if (!token.empty())
-        {
-            req.setHeader("Authorization", "Bearer " + token);
-        }
+        req.setAttribute("accountId", accountId);
 
         return req;
     }
@@ -75,7 +62,6 @@ protected:
     }
 
     std::shared_ptr<MockPortfolioService> mockPortfolioService_;
-    std::shared_ptr<MockAuthClient> mockAuthClient_;
     std::unique_ptr<GetCashHandler> handler_;
 };
 
@@ -87,15 +73,11 @@ TEST_F(GetCashHandlerTest, ValidToken_ReturnsCash)
 {
     auto cash = domain::Money::fromDouble(100000.0, "RUB");
 
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("valid-token"))
-        .Times(1)
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockPortfolioService_, getAvailableCash("acc-001"))
         .Times(1)
         .WillOnce(Return(cash));
 
-    auto req = createRequest("GET", "/api/v1/portfolio/cash", "valid-token");
+    auto req = createRequest("GET", "/api/v1/portfolio/cash", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -111,13 +93,10 @@ TEST_F(GetCashHandlerTest, CashFields_AllPresent)
 {
     auto cash = domain::Money::fromDouble(50000.0, "RUB");
 
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken(_))
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockPortfolioService_, getAvailableCash(_))
         .WillOnce(Return(cash));
 
-    auto req = createRequest("GET", "/api/v1/portfolio/cash", "valid-token");
+    auto req = createRequest("GET", "/api/v1/portfolio/cash", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -131,13 +110,10 @@ TEST_F(GetCashHandlerTest, DifferentCurrency_ReturnsCorrectCurrency)
 {
     auto cash = domain::Money::fromDouble(5000.0, "USD");
 
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken(_))
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockPortfolioService_, getAvailableCash(_))
         .WillOnce(Return(cash));
 
-    auto req = createRequest("GET", "/api/v1/portfolio/cash", "valid-token");
+    auto req = createRequest("GET", "/api/v1/portfolio/cash", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -151,13 +127,10 @@ TEST_F(GetCashHandlerTest, ZeroCash_ReturnsZero)
 {
     auto cash = domain::Money::fromDouble(0.0, "RUB");
 
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken(_))
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockPortfolioService_, getAvailableCash(_))
         .WillOnce(Return(cash));
 
-    auto req = createRequest("GET", "/api/v1/portfolio/cash", "valid-token");
+    auto req = createRequest("GET", "/api/v1/portfolio/cash", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -168,40 +141,22 @@ TEST_F(GetCashHandlerTest, ZeroCash_ReturnsZero)
     EXPECT_EQ(json["amount"], 0.0);
 }
 
-TEST_F(GetCashHandlerTest, NoToken_Returns401)
+TEST_F(GetCashHandlerTest, NoAccountId_Returns500)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken(""))
-        .Times(1)
-        .WillOnce(Return(std::nullopt));
-
-    auto req = createRequest("GET", "/api/v1/portfolio/cash");
+    auto req = createRequest("GET", "/api/v1/portfolio/cash", "");
     SimpleResponse res;
 
     handler_->handle(req, res);
 
-    EXPECT_EQ(res.getStatus(), 401);
+    EXPECT_EQ(res.getStatus(), 500);
 
     auto json = parseJson(res.getBody());
     EXPECT_TRUE(json.contains("error"));
 }
 
-TEST_F(GetCashHandlerTest, InvalidToken_Returns401)
-{
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("invalid-token"))
-        .Times(1)
-        .WillOnce(Return(std::nullopt));
-
-    auto req = createRequest("GET", "/api/v1/portfolio/cash", "invalid-token");
-    SimpleResponse res;
-
-    handler_->handle(req, res);
-
-    EXPECT_EQ(res.getStatus(), 401);
-}
-
 TEST_F(GetCashHandlerTest, PostMethod_Returns405)
 {
-    auto req = createRequest("POST", "/api/v1/portfolio/cash", "valid-token");
+    auto req = createRequest("POST", "/api/v1/portfolio/cash", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -211,7 +166,7 @@ TEST_F(GetCashHandlerTest, PostMethod_Returns405)
 
 TEST_F(GetCashHandlerTest, PutMethod_Returns405)
 {
-    auto req = createRequest("PUT", "/api/v1/portfolio/cash", "valid-token");
+    auto req = createRequest("PUT", "/api/v1/portfolio/cash", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -221,13 +176,10 @@ TEST_F(GetCashHandlerTest, PutMethod_Returns405)
 
 TEST_F(GetCashHandlerTest, ServiceThrows_Returns500)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken(_))
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockPortfolioService_, getAvailableCash(_))
         .WillOnce(Throw(std::runtime_error("Service unavailable")));
 
-    auto req = createRequest("GET", "/api/v1/portfolio/cash", "valid-token");
+    auto req = createRequest("GET", "/api/v1/portfolio/cash", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);

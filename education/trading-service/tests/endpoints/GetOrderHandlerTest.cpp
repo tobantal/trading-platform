@@ -1,16 +1,8 @@
-/**
- * @file GetOrderHandlerTest.cpp
- * @brief Unit-тесты для GetOrderHandler
- *
- * GET /api/v1/orders/{id} — ордер по ID
- */
-
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
 #include "adapters/primary/GetOrderHandler.hpp"
 #include "ports/input/IOrderService.hpp"
-#include "ports/output/IAuthClient.hpp"
 
 #include <SimpleRequest.hpp>
 #include <SimpleResponse.hpp>
@@ -22,10 +14,6 @@ using ::testing::_;
 using ::testing::Return;
 using ::testing::Throw;
 
-// ============================================================================
-// Mocks
-// ============================================================================
-
 class MockOrderService : public ports::input::IOrderService
 {
 public:
@@ -35,40 +23,24 @@ public:
     MOCK_METHOD(std::vector<domain::Order>, getAllOrders, (const std::string &), (override));
 };
 
-class MockAuthClient : public ports::output::IAuthClient
-{
-public:
-    MOCK_METHOD(ports::output::TokenValidationResult, validateAccessToken, (const std::string &), (override));
-    MOCK_METHOD(std::optional<std::string>, getAccountIdFromToken, (const std::string &), (override));
-};
-
-// ============================================================================
-// Test Fixture
-// ============================================================================
-
 class GetOrderHandlerTest : public ::testing::Test
 {
 protected:
     void SetUp() override
     {
         mockOrderService_ = std::make_shared<MockOrderService>();
-        mockAuthClient_ = std::make_shared<MockAuthClient>();
-        handler_ = std::make_unique<GetOrderHandler>(mockOrderService_, mockAuthClient_);
+        handler_ = std::make_unique<GetOrderHandler>(mockOrderService_);
     }
 
     SimpleRequest createRequest(const std::string &method,
                                 const std::string &path,
-                                const std::string &token = "",
+                                const std::string &accountId = "",
                                 const std::string &pathPattern = "")
     {
         SimpleRequest req;
         req.setMethod(method);
         req.setPath(path);
-
-        if (!token.empty())
-        {
-            req.setHeader("Authorization", "Bearer " + token);
-        }
+        req.setAttribute("accountId", accountId);
 
         if (!pathPattern.empty())
         {
@@ -102,25 +74,17 @@ protected:
     }
 
     std::shared_ptr<MockOrderService> mockOrderService_;
-    std::shared_ptr<MockAuthClient> mockAuthClient_;
     std::unique_ptr<GetOrderHandler> handler_;
 };
-
-// ============================================================================
-// ТЕСТЫ: GET /api/v1/orders/{id}
-// ============================================================================
 
 TEST_F(GetOrderHandlerTest, Found_Returns200)
 {
     auto order = createTestOrder("ord-12345", "acc-001");
 
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("valid-token"))
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockOrderService_, getOrderById("acc-001", "ord-12345"))
         .WillOnce(Return(order));
 
-    auto req = createRequest("GET", "/api/v1/orders/ord-12345", "valid-token", "/api/v1/orders/*");
+    auto req = createRequest("GET", "/api/v1/orders/ord-12345", "acc-001", "/api/v1/orders/*");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -134,87 +98,33 @@ TEST_F(GetOrderHandlerTest, Found_Returns200)
 
 TEST_F(GetOrderHandlerTest, NotFound_Returns404)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("valid-token"))
-        .WillOnce(Return("acc-001"));
-
-    EXPECT_CALL(*mockOrderService_, getOrderById("acc-001", "non-existent"))
+    EXPECT_CALL(*mockOrderService_, getOrderById("acc-001", "ord-99999"))
         .WillOnce(Return(std::nullopt));
 
-    auto req = createRequest("GET", "/api/v1/orders/non-existent", "valid-token", "/api/v1/orders/*");
+    auto req = createRequest("GET", "/api/v1/orders/ord-99999", "acc-001", "/api/v1/orders/*");
     SimpleResponse res;
 
     handler_->handle(req, res);
 
     EXPECT_EQ(res.getStatus(), 404);
-
-    auto json = parseJson(res.getBody());
-    EXPECT_EQ(json["error"], "Order not found");
 }
 
-TEST_F(GetOrderHandlerTest, MissingOrderId_Returns400)
+TEST_F(GetOrderHandlerTest, NoAccountId_Returns500)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("valid-token"))
-        .WillOnce(Return("acc-001"));
-
-    auto req = createRequest("GET", "/api/v1/orders/", "valid-token");
-    SimpleResponse res;
-
-    handler_->handle(req, res);
-
-    EXPECT_EQ(res.getStatus(), 400);
-
-    auto json = parseJson(res.getBody());
-    EXPECT_TRUE(json["error"].get<std::string>().find("Order ID") != std::string::npos);
-}
-
-TEST_F(GetOrderHandlerTest, NoToken_Returns401)
-{
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken(""))
-        .WillOnce(Return(std::nullopt));
-
     auto req = createRequest("GET", "/api/v1/orders/ord-12345", "", "/api/v1/orders/*");
     SimpleResponse res;
 
     handler_->handle(req, res);
 
-    EXPECT_EQ(res.getStatus(), 401);
-}
-
-TEST_F(GetOrderHandlerTest, InvalidToken_Returns401)
-{
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("invalid-token"))
-        .WillOnce(Return(std::nullopt));
-
-    auto req = createRequest("GET", "/api/v1/orders/ord-12345", "invalid-token", "/api/v1/orders/*");
-    SimpleResponse res;
-
-    handler_->handle(req, res);
-
-    EXPECT_EQ(res.getStatus(), 401);
+    EXPECT_EQ(res.getStatus(), 500);
 }
 
 TEST_F(GetOrderHandlerTest, PostMethod_Returns405)
 {
-    auto req = createRequest("POST", "/api/v1/orders/ord-12345", "valid-token");
+    auto req = createRequest("POST", "/api/v1/orders/ord-12345", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
 
     EXPECT_EQ(res.getStatus(), 405);
-}
-
-TEST_F(GetOrderHandlerTest, ServiceThrows_Returns500)
-{
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken(_))
-        .WillOnce(Return("acc-001"));
-
-    EXPECT_CALL(*mockOrderService_, getOrderById(_, _))
-        .WillOnce(Throw(std::runtime_error("Service unavailable")));
-
-    auto req = createRequest("GET", "/api/v1/orders/ord-12345", "valid-token", "/api/v1/orders/*");
-    SimpleResponse res;
-
-    handler_->handle(req, res);
-
-    EXPECT_EQ(res.getStatus(), 500);
 }

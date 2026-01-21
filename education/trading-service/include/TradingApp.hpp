@@ -73,153 +73,152 @@ namespace di = boost::di;
 namespace trading
 {
 
-    /**
-     * @brief Trading Service Application (Event-Driven)
-     *
-     * Публикует: order.create, order.cancel (в trading.events)
-     * Слушает: order.*, quote.updated, portfolio.updated (из broker.events)
-     * HTTP: GET для чтения, POST/DELETE публикуют события в RabbitMQ
-     */
-    class TradingApp : public BoostBeastApplication
-    {
-    public:
-        TradingApp() { std::cout << "[TradingApp] Initializing..." << std::endl; }
-        ~TradingApp() override { std::cout << "[TradingApp] Shutting down..." << std::endl; }
-
-    protected:
-        void loadEnvironment(int argc, char *argv[]) override
+        /**
+         * @brief Trading Service Application (Event-Driven)
+         *
+         * Публикует: order.create, order.cancel (в trading.events)
+         * Слушает: order.*, quote.updated, portfolio.updated (из broker.events)
+         * HTTP: GET для чтения, POST/DELETE публикуют события в RabbitMQ
+         */
+        class TradingApp : public BoostBeastApplication
         {
-            BoostBeastApplication::loadEnvironment(argc, argv);
-            std::cout << "[TradingApp] Environment loaded" << std::endl;
-        }
+        public:
+                TradingApp() { std::cout << "[TradingApp] Initializing..." << std::endl; }
+                ~TradingApp() override { std::cout << "[TradingApp] Shutting down..." << std::endl; }
 
-        // TODO: метод потом переместить в библиотеку cpp-http-server-lib
-        template <typename... Handlers>
-        void registerEndpoint(const std::string &method, const std::string &path, Handlers &&...handlers)
-        {
-            handlers_[getHandlerKey(method, path)] =
-                std::make_shared<serverlib::ChainHandler>(std::forward<Handlers>(handlers)...);
-        }
+        protected:
+                void loadEnvironment(int argc, char *argv[]) override
+                {
+                        BoostBeastApplication::loadEnvironment(argc, argv);
+                        std::cout << "[TradingApp] Environment loaded" << std::endl;
+                }
 
-        void configureInjection() override
-        {
-            std::cout << "[TradingApp] Configuring DI..." << std::endl;
+                // TODO: метод потом переместить в библиотеку cpp-http-server-lib
+                template <typename... Handlers>
+                void registerEndpoint(const std::string &method, const std::string &path, Handlers &&...handlers)
+                {
+                        handlers_[getHandlerKey(method, path)] =
+                            std::make_shared<serverlib::ChainHandler>(std::forward<Handlers>(handlers)...);
+                }
 
-            // Шаг 1: Создаём RabbitMQAdapter через DI
-            auto rabbitInjector = di::make_injector(
-                di::bind<settings::RabbitMQSettings>().in(di::singleton));
-            auto rabbitMQAdapter = rabbitInjector.create<std::shared_ptr<adapters::secondary::RabbitMQAdapter>>();
+                void configureInjection() override
+                {
+                        std::cout << "[TradingApp] Configuring DI..." << std::endl;
 
-            // Шаг 2: Основной injector
-            auto injector = di::make_injector(
-                // Settings
-                di::bind<settings::DbSettings>().in(di::singleton),
-                di::bind<settings::AuthClientSettings>().in(di::singleton),
-                di::bind<settings::IBrokerClientSettings>().to<settings::BrokerClientSettings>().in(di::singleton),
-                di::bind<settings::RabbitMQSettings>().in(di::singleton),
-                di::bind<settings::CacheSettings>().in(di::singleton),
-                di::bind<settings::IMetricsSettings>().to<settings::MetricsSettings>().in(di::singleton),
+                        // Шаг 1: Создаём RabbitMQAdapter через DI
+                        auto rabbitInjector = di::make_injector(
+                            di::bind<settings::RabbitMQSettings>().in(di::singleton));
+                        auto rabbitMQAdapter = rabbitInjector.create<std::shared_ptr<adapters::secondary::RabbitMQAdapter>>();
 
-                // Repositories
-                di::bind<ports::output::IIdempotencyRepository>()
-                    .to<adapters::secondary::PostgresIdempotencyRepository>()
-                    .in(di::singleton),
+                        // Шаг 2: Основной injector
+                        auto injector = di::make_injector(
+                            // Settings
+                            di::bind<settings::DbSettings>().in(di::singleton),
+                            di::bind<settings::AuthClientSettings>().in(di::singleton),
+                            di::bind<settings::IBrokerClientSettings>().to<settings::BrokerClientSettings>().in(di::singleton),
+                            di::bind<settings::RabbitMQSettings>().in(di::singleton),
+                            di::bind<settings::CacheSettings>().in(di::singleton),
+                            di::bind<settings::IMetricsSettings>().to<settings::MetricsSettings>().in(di::singleton),
 
-                // Clients
-                di::bind<IHttpClient>().to<HttpClient>().in(di::singleton),
-                di::bind<adapters::secondary::HttpBrokerGateway>().in(di::singleton),
-                di::bind<ports::output::IAuthClient>().to<adapters::secondary::HttpAuthClient>().in(di::singleton),
-                di::bind<ports::output::IBrokerGateway>().to<adapters::secondary::CachedBrokerGateway>().in(di::singleton),
+                            // Repositories
+                            di::bind<ports::output::IIdempotencyRepository>()
+                                .to<adapters::secondary::PostgresIdempotencyRepository>()
+                                .in(di::singleton),
 
-                // RabbitMQ
-                di::bind<ports::output::IEventPublisher>().to(rabbitMQAdapter),
-                di::bind<ports::input::IEventConsumer>().to(rabbitMQAdapter),
+                            // Clients
+                            di::bind<IHttpClient>().to<HttpClient>().in(di::singleton),
+                            di::bind<adapters::secondary::HttpBrokerGateway>().in(di::singleton),
+                            di::bind<ports::output::IAuthClient>().to<adapters::secondary::HttpAuthClient>().in(di::singleton),
+                            di::bind<ports::output::IBrokerGateway>().to<adapters::secondary::CachedBrokerGateway>().in(di::singleton),
 
-                // Services
-                di::bind<ports::input::IMetricsService>().to<application::MetricsService>().in(di::singleton),
-                di::bind<ports::input::IMarketService>().to<application::MarketService>().in(di::singleton),
-                di::bind<ports::input::IOrderService>().to<application::OrderService>().in(di::singleton),
-                di::bind<ports::input::IPortfolioService>().to<application::PortfolioService>().in(di::singleton));
+                            // RabbitMQ
+                            di::bind<ports::output::IEventPublisher>().to(rabbitMQAdapter),
+                            di::bind<ports::input::IEventConsumer>().to(rabbitMQAdapter),
 
-            // Middleware
-            auto metricsMiddleware = injector.create<std::shared_ptr<serverlib::MetricsMiddleware>>();
-            auto idempotencyCacheReader = injector.create<std::shared_ptr<adapters::primary::IdempotencyCacheReader>>();
-            auto idempotencyCacheWriter = injector.create<std::shared_ptr<adapters::primary::IdempotencyCacheWriter>>();
-            auto accountIdExtractorMiddleware = injector.create<std::shared_ptr<adapters::primary::AccountIdExtractorMiddleware>>();
+                            // Services
+                            di::bind<ports::input::IMetricsService>().to<application::MetricsService>().in(di::singleton),
+                            di::bind<ports::input::IMarketService>().to<application::MarketService>().in(di::singleton),
+                            di::bind<ports::input::IOrderService>().to<application::OrderService>().in(di::singleton),
+                            di::bind<ports::input::IPortfolioService>().to<application::PortfolioService>().in(di::singleton));
 
-            // Шаг 3: Получаем MetricsService для декораторов
-            auto metricsService = injector.create<std::shared_ptr<ports::input::IMetricsService>>();
+                        // Middleware
+                        auto metricsMiddleware = injector.create<std::shared_ptr<serverlib::MetricsMiddleware>>();
+                        auto idempotencyCacheReader = injector.create<std::shared_ptr<adapters::primary::IdempotencyCacheReader>>();
+                        auto idempotencyCacheWriter = injector.create<std::shared_ptr<adapters::primary::IdempotencyCacheWriter>>();
+                        auto accountIdExtractorMiddleware = injector.create<std::shared_ptr<adapters::primary::AccountIdExtractorMiddleware>>();
 
-            // Шаг 4: HTTP Handlers
+                        // Шаг 3: Получаем MetricsService для декораторов
+                        auto metricsService = injector.create<std::shared_ptr<ports::input::IMetricsService>>();
 
-            // Health (с метриками)
-            auto healthHandler = injector.create<std::shared_ptr<adapters::primary::HealthHandler>>();
-            registerEndpoint("GET", "/health", 
-                metricsMiddleware, healthHandler);
+                        // Шаг 4: HTTP Handlers
 
-            // Metrics (без middleware — сам себя не считает)
-            registerEndpoint("GET", "/metrics",
-                injector.create<std::shared_ptr<adapters::primary::MetricsHandler>>()
-            );
+                        // Health (с метриками)
+                        auto healthHandler = injector.create<std::shared_ptr<adapters::primary::HealthHandler>>();
+                        registerEndpoint("GET", "/health",
+                                         metricsMiddleware, healthHandler);
 
-            // Market (с метриками)
-            auto getQuotesHandler = injector.create<std::shared_ptr<adapters::primary::GetQuotesHandler>>();
-            auto getAllInstrumentsHandler = injector.create<std::shared_ptr<adapters::primary::GetAllInstrumentsHandler>>();
-            auto searchInstrumentsHandler = injector.create<std::shared_ptr<adapters::primary::SearchInstrumentsHandler>>();
-            auto getInstrumentByFigiHandler = injector.create<std::shared_ptr<adapters::primary::GetInstrumentByFigiHandler>>();
+                        // Metrics (без middleware — сам себя не считает)
+                        registerEndpoint("GET", "/metrics",
+                                         injector.create<std::shared_ptr<adapters::primary::MetricsHandler>>());
 
-            registerEndpoint("GET", "/api/v1/quotes",
-                    metricsMiddleware, getQuotesHandler);
-            registerEndpoint("GET", "/api/v1/instruments",
-                    metricsMiddleware, getAllInstrumentsHandler);
-            registerEndpoint("GET", "/api/v1/instruments/search",
-                    metricsMiddleware, searchInstrumentsHandler);
-            registerEndpoint("GET", "/api/v1/instruments/*",
-                    metricsMiddleware, getInstrumentByFigiHandler);
+                        // Market (с метриками)
+                        auto getQuotesHandler = injector.create<std::shared_ptr<adapters::primary::GetQuotesHandler>>();
+                        auto getAllInstrumentsHandler = injector.create<std::shared_ptr<adapters::primary::GetAllInstrumentsHandler>>();
+                        auto searchInstrumentsHandler = injector.create<std::shared_ptr<adapters::primary::SearchInstrumentsHandler>>();
+                        auto getInstrumentByFigiHandler = injector.create<std::shared_ptr<adapters::primary::GetInstrumentByFigiHandler>>();
 
-            // Orders (с идемпотентностью и метриками)
-            auto createOrderHandler = injector.create<std::shared_ptr<adapters::primary::CreateOrderHandler>>();
-            auto getOrdersHandler = injector.create<std::shared_ptr<adapters::primary::GetOrdersHandler>>();
-            auto getOrderHandler = injector.create<std::shared_ptr<adapters::primary::GetOrderHandler>>();
-            auto cancelOrderHandler = injector.create<std::shared_ptr<adapters::primary::CancelOrderHandler>>();
+                        registerEndpoint("GET", "/api/v1/quotes",
+                                         metricsMiddleware, getQuotesHandler);
+                        registerEndpoint("GET", "/api/v1/instruments",
+                                         metricsMiddleware, getAllInstrumentsHandler);
+                        registerEndpoint("GET", "/api/v1/instruments/search",
+                                         metricsMiddleware, searchInstrumentsHandler);
+                        registerEndpoint("GET", "/api/v1/instruments/*",
+                                         metricsMiddleware, getInstrumentByFigiHandler);
 
-            registerEndpoint("GET", "/api/v1/orders",
-                    metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, getOrdersHandler, idempotencyCacheWriter);
-            registerEndpoint("GET", "/api/v1/orders/*",
-                    metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, getOrderHandler, idempotencyCacheWriter);
-            registerEndpoint("DELETE", "/api/v1/orders/*",
-                    metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, cancelOrderHandler, idempotencyCacheWriter);
-            registerEndpoint("POST", "/api/v1/orders",
-                    metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, createOrderHandler, idempotencyCacheWriter);
+                        // Orders (с идемпотентностью и метриками)
+                        auto createOrderHandler = injector.create<std::shared_ptr<adapters::primary::CreateOrderHandler>>();
+                        auto getOrdersHandler = injector.create<std::shared_ptr<adapters::primary::GetOrdersHandler>>();
+                        auto getOrderHandler = injector.create<std::shared_ptr<adapters::primary::GetOrderHandler>>();
+                        auto cancelOrderHandler = injector.create<std::shared_ptr<adapters::primary::CancelOrderHandler>>();
 
-            // Portfolio (с метриками)
-            auto getPortfolioHandler = injector.create<std::shared_ptr<adapters::primary::GetPortfolioHandler>>();
-            auto getPositionsHandler = injector.create<std::shared_ptr<adapters::primary::GetPositionsHandler>>();
-            auto getCashHandler = injector.create<std::shared_ptr<adapters::primary::GetCashHandler>>();
+                        registerEndpoint("GET", "/api/v1/orders",
+                                         metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, getOrdersHandler, idempotencyCacheWriter);
+                        registerEndpoint("GET", "/api/v1/orders/*",
+                                         metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, getOrderHandler, idempotencyCacheWriter);
+                        registerEndpoint("DELETE", "/api/v1/orders/*",
+                                         metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, cancelOrderHandler, idempotencyCacheWriter);
+                        registerEndpoint("POST", "/api/v1/orders",
+                                         metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, createOrderHandler, idempotencyCacheWriter);
 
-            registerEndpoint("GET", "/api/v1/portfolio",
-                    metricsMiddleware, getPortfolioHandler);
-            registerEndpoint("GET", "/api/v1/portfolio/positions",
-                    metricsMiddleware, getPositionsHandler);
-            registerEndpoint("GET", "/api/v1/portfolio/cash",
-                    metricsMiddleware, getCashHandler);
+                        // Portfolio (с метриками и accountId middleware)
+                        auto getPortfolioHandler = injector.create<std::shared_ptr<adapters::primary::GetPortfolioHandler>>();
+                        auto getPositionsHandler = injector.create<std::shared_ptr<adapters::primary::GetPositionsHandler>>();
+                        auto getCashHandler = injector.create<std::shared_ptr<adapters::primary::GetCashHandler>>();
 
-            // Шаг 5: Event Handlers
-            auto tradingEventHandler = injector.create<std::shared_ptr<application::TradingEventHandler>>();
-            tradingEventHandler->onOrderUpdate([](const application::TradingEventHandler::OrderUpdate &u)
-                                               { std::cout << "[TradingApp] Order " << u.orderId << " -> " << u.status << std::endl; });
-            tradingEventHandler->onPortfolioUpdate([](const std::string &accountId, const nlohmann::json &)
-                                                   { std::cout << "[TradingApp] Portfolio updated: " << accountId << std::endl; });
+                        registerEndpoint("GET", "/api/v1/portfolio",
+                                         metricsMiddleware, accountIdExtractorMiddleware, getPortfolioHandler);
+                        registerEndpoint("GET", "/api/v1/portfolio/positions",
+                                         metricsMiddleware, accountIdExtractorMiddleware, getPositionsHandler);
+                        registerEndpoint("GET", "/api/v1/portfolio/cash",
+                                         metricsMiddleware, accountIdExtractorMiddleware, getCashHandler);
 
-            // AllEventsListener для метрик
-            auto allEventsListener = std::make_shared<adapters::primary::AllEventsListener>(rabbitMQAdapter, metricsService);
+                        // Шаг 5: Event Handlers
+                        auto tradingEventHandler = injector.create<std::shared_ptr<application::TradingEventHandler>>();
+                        tradingEventHandler->onOrderUpdate([](const application::TradingEventHandler::OrderUpdate &u)
+                                                           { std::cout << "[TradingApp] Order " << u.orderId << " -> " << u.status << std::endl; });
+                        tradingEventHandler->onPortfolioUpdate([](const std::string &accountId, const nlohmann::json &)
+                                                               { std::cout << "[TradingApp] Portfolio updated: " << accountId << std::endl; });
 
-            // Шаг 6: Запускаем RabbitMQ
-            std::cout << "[TradingApp] Starting RabbitMQ..." << std::endl;
-            rabbitMQAdapter->start();
+                        // AllEventsListener для метрик
+                        auto allEventsListener = std::make_shared<adapters::primary::AllEventsListener>(rabbitMQAdapter, metricsService);
 
-            std::cout << "[TradingApp] Ready (events via RabbitMQ)" << std::endl;
-        }
-    };
+                        // Шаг 6: Запускаем RabbitMQ
+                        std::cout << "[TradingApp] Starting RabbitMQ..." << std::endl;
+                        rabbitMQAdapter->start();
+
+                        std::cout << "[TradingApp] Ready (events via RabbitMQ)" << std::endl;
+                }
+        };
 
 } // namespace trading

@@ -10,7 +10,6 @@
 
 #include "adapters/primary/GetPositionsHandler.hpp"
 #include "ports/input/IPortfolioService.hpp"
-#include "ports/output/IAuthClient.hpp"
 
 #include <SimpleRequest.hpp>
 #include <SimpleResponse.hpp>
@@ -32,13 +31,6 @@ public:
     MOCK_METHOD(std::vector<domain::Position>, getPositions, (const std::string&), (override));
 };
 
-class MockAuthClient : public ports::output::IAuthClient
-{
-public:
-    MOCK_METHOD(ports::output::TokenValidationResult, validateAccessToken, (const std::string &), (override));
-    MOCK_METHOD(std::optional<std::string>, getAccountIdFromToken, (const std::string &), (override));
-};
-
 // ============================================================================
 // Test Fixture
 // ============================================================================
@@ -49,22 +41,17 @@ protected:
     void SetUp() override
     {
         mockPortfolioService_ = std::make_shared<MockPortfolioService>();
-        mockAuthClient_ = std::make_shared<MockAuthClient>();
-        handler_ = std::make_unique<GetPositionsHandler>(mockPortfolioService_, mockAuthClient_);
+        handler_ = std::make_unique<GetPositionsHandler>(mockPortfolioService_);
     }
 
     SimpleRequest createRequest(const std::string &method,
                                 const std::string &path,
-                                const std::string &token = "")
+                                const std::string &accountId = "")
     {
         SimpleRequest req;
         req.setMethod(method);
         req.setPath(path);
-
-        if (!token.empty())
-        {
-            req.setHeader("Authorization", "Bearer " + token);
-        }
+        req.setAttribute("accountId", accountId);
 
         return req;
     }
@@ -98,7 +85,6 @@ protected:
     }
 
     std::shared_ptr<MockPortfolioService> mockPortfolioService_;
-    std::shared_ptr<MockAuthClient> mockAuthClient_;
     std::unique_ptr<GetPositionsHandler> handler_;
 };
 
@@ -111,15 +97,11 @@ TEST_F(GetPositionsHandlerTest, ValidToken_ReturnsPositionsArray)
     auto portfolio = createEmptyPortfolio();
     portfolio.positions.push_back(createTestPosition("BBG004730N88", "SBER", 100));
 
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("valid-token"))
-        .Times(1)
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockPortfolioService_, getPortfolio("acc-001"))
         .Times(1)
         .WillOnce(Return(portfolio));
 
-    auto req = createRequest("GET", "/api/v1/portfolio/positions", "valid-token");
+    auto req = createRequest("GET", "/api/v1/portfolio/positions", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -136,13 +118,10 @@ TEST_F(GetPositionsHandlerTest, PositionFields_AllPresent)
     auto portfolio = createEmptyPortfolio();
     portfolio.positions.push_back(createTestPosition("BBG004730N88", "SBER", 100));
 
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken(_))
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockPortfolioService_, getPortfolio(_))
         .WillOnce(Return(portfolio));
 
-    auto req = createRequest("GET", "/api/v1/portfolio/positions", "valid-token");
+    auto req = createRequest("GET", "/api/v1/portfolio/positions", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -167,13 +146,10 @@ TEST_F(GetPositionsHandlerTest, MultiplePositions_ReturnsAll)
     portfolio.positions.push_back(createTestPosition("BBG006L8G4H1", "YNDX", 50));
     portfolio.positions.push_back(createTestPosition("BBG004731032", "GAZP", 200));
 
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken(_))
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockPortfolioService_, getPortfolio(_))
         .WillOnce(Return(portfolio));
 
-    auto req = createRequest("GET", "/api/v1/portfolio/positions", "valid-token");
+    auto req = createRequest("GET", "/api/v1/portfolio/positions", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -186,13 +162,10 @@ TEST_F(GetPositionsHandlerTest, EmptyPositions_ReturnsEmptyArray)
 {
     auto portfolio = createEmptyPortfolio();
 
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken(_))
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockPortfolioService_, getPortfolio(_))
         .WillOnce(Return(portfolio));
 
-    auto req = createRequest("GET", "/api/v1/portfolio/positions", "valid-token");
+    auto req = createRequest("GET", "/api/v1/portfolio/positions", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -204,37 +177,19 @@ TEST_F(GetPositionsHandlerTest, EmptyPositions_ReturnsEmptyArray)
     EXPECT_EQ(json.size(), 0);
 }
 
-TEST_F(GetPositionsHandlerTest, NoToken_Returns401)
+TEST_F(GetPositionsHandlerTest, NoAccountId_Returns500)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken(""))
-        .Times(1)
-        .WillOnce(Return(std::nullopt));
-
-    auto req = createRequest("GET", "/api/v1/portfolio/positions");
+    auto req = createRequest("GET", "/api/v1/portfolio/positions", "");
     SimpleResponse res;
 
     handler_->handle(req, res);
 
-    EXPECT_EQ(res.getStatus(), 401);
-}
-
-TEST_F(GetPositionsHandlerTest, InvalidToken_Returns401)
-{
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken("invalid-token"))
-        .Times(1)
-        .WillOnce(Return(std::nullopt));
-
-    auto req = createRequest("GET", "/api/v1/portfolio/positions", "invalid-token");
-    SimpleResponse res;
-
-    handler_->handle(req, res);
-
-    EXPECT_EQ(res.getStatus(), 401);
+    EXPECT_EQ(res.getStatus(), 500);
 }
 
 TEST_F(GetPositionsHandlerTest, PostMethod_Returns405)
 {
-    auto req = createRequest("POST", "/api/v1/portfolio/positions", "valid-token");
+    auto req = createRequest("POST", "/api/v1/portfolio/positions", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
@@ -244,13 +199,10 @@ TEST_F(GetPositionsHandlerTest, PostMethod_Returns405)
 
 TEST_F(GetPositionsHandlerTest, ServiceThrows_Returns500)
 {
-    EXPECT_CALL(*mockAuthClient_, getAccountIdFromToken(_))
-        .WillOnce(Return("acc-001"));
-
     EXPECT_CALL(*mockPortfolioService_, getPortfolio(_))
         .WillOnce(Throw(std::runtime_error("Service unavailable")));
 
-    auto req = createRequest("GET", "/api/v1/portfolio/positions", "valid-token");
+    auto req = createRequest("GET", "/api/v1/portfolio/positions", "acc-001");
     SimpleResponse res;
 
     handler_->handle(req, res);
