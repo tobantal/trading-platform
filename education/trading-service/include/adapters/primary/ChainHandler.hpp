@@ -3,6 +3,7 @@
 #include <IHttpHandler.hpp>
 #include <memory>
 #include <vector>
+#include <nlohmann/json.hpp>
 
 // TODO: перенести в библиотеку cpp-http-server-lib после успешного внедрения.
 namespace serverlib
@@ -25,10 +26,23 @@ namespace serverlib
                 if (res.getStatus() != 0)
                     return;
             }
+
+            // если в конце статус все равно = 0, то это ошибка бизнес логики
+            if (res.getStatus() == 0) {
+                std::cerr << "[ChainHandler] Error: " << "middleware chain finished, but httpStatus is zero." << std::endl;
+                sendError(res, 500, "Internal server error");
+            }
         }
 
     private:
         std::vector<std::shared_ptr<IHttpHandler>> handlers_;
+
+         void sendError(IResponse &res, int status, const std::string &message)
+        {
+            nlohmann::json error;
+            error["error"] = message;
+            res.setResult(status, "application/json", error.dump());
+        }
     };
 
 } // namespace serverlib

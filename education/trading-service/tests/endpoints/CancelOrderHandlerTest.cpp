@@ -78,7 +78,7 @@ protected:
 // ТЕСТЫ: DELETE /api/v1/orders/{id}
 // ============================================================================
 
-TEST_F(CancelOrderHandlerTest, Success_Returns200)
+TEST_F(CancelOrderHandlerTest, Success_Returns0)
 {
     EXPECT_CALL(*mockOrderService_, cancelOrder("acc-001", "ord-12345"))
         .WillOnce(Return(true));
@@ -88,7 +88,8 @@ TEST_F(CancelOrderHandlerTest, Success_Returns200)
 
     handler_->handle(req, res);
 
-    EXPECT_EQ(res.getStatus(), 200);
+    EXPECT_EQ(res.getStatus(), 0);
+    EXPECT_EQ(req.getAttribute("httpStatus"), "200");
 
     auto json = parseJson(res.getBody());
     EXPECT_EQ(json["message"], "Order cancelled");

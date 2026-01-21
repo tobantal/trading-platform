@@ -183,13 +183,13 @@ namespace trading
                         auto cancelOrderHandler = injector.create<std::shared_ptr<adapters::primary::CancelOrderHandler>>();
 
                         registerEndpoint("GET", "/api/v1/orders",
-                                         metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, getOrdersHandler, idempotencyCacheWriter);
+                                         metricsMiddleware, accountIdExtractorMiddleware, getOrdersHandler);
                         registerEndpoint("GET", "/api/v1/orders/*",
-                                         metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, getOrderHandler, idempotencyCacheWriter);
+                                         metricsMiddleware, accountIdExtractorMiddleware, getOrderHandler);
                         registerEndpoint("DELETE", "/api/v1/orders/*",
-                                         metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, cancelOrderHandler, idempotencyCacheWriter);
+                                         metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, cancelOrderHandler, idempotencyCacheWriter); //FIXME: httpStatus
                         registerEndpoint("POST", "/api/v1/orders",
-                                         metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, createOrderHandler, idempotencyCacheWriter);
+                                         metricsMiddleware, accountIdExtractorMiddleware, idempotencyCacheReader, createOrderHandler, idempotencyCacheWriter); //FIXME: httpStatus
 
                         // Portfolio (с метриками и accountId middleware)
                         auto getPortfolioHandler = injector.create<std::shared_ptr<adapters::primary::GetPortfolioHandler>>();

@@ -113,17 +113,33 @@ push-trading:
 # KUBERNETES DEPLOY
 # =============================================================================
 
+# Генерация ConfigMaps из SQL (единый источник правды)
+generate-sql-configmaps:
+	@echo "--- Generating SQL ConfigMaps ---"
+	kubectl create configmap auth-postgres-init \
+		--from-file=01-schema.sql=auth-service/sql/01-schema.sql \
+		--from-file=02-data.sql=auth-service/sql/02-data.sql \
+		-n trading --dry-run=client -o yaml | kubectl apply -f -
+	kubectl create configmap broker-postgres-init \
+		--from-file=01-schema.sql=broker-service/sql/01-schema.sql \
+		--from-file=02-data.sql=broker-service/sql/02-data.sql \
+		-n trading --dry-run=client -o yaml | kubectl apply -f -
+	kubectl create configmap trading-postgres-init \
+		--from-file=01-schema.sql=trading-service/sql/01-schema.sql \
+		--from-file=02-data.sql=trading-service/sql/02-data.sql \
+		-n trading --dry-run=client -o yaml | kubectl apply -f -
 
-deploy:
+
+deploy: generate-sql-configmaps
 	@echo "--- Applying k8s manifests ---"
-	kubectl apply -f k8s/
+	kubectl apply -k k8s/
 	@echo ""
 	@echo "Waiting for pods..."
 	@sleep 3
 	@$(MAKE) status
 
 
-redeploy:
+redeploy: generate-sql-configmaps
 	@echo "=== Full Redeploy ==="
 	@echo ""
 	@echo "--- Deleting deployments ---"
@@ -133,7 +149,7 @@ redeploy:
 	@sleep 5
 	@echo ""
 	@echo "--- Applying k8s manifests ---"
-	kubectl apply -f k8s/
+	kubectl apply -k k8s/
 	@echo ""
 	@echo "--- Waiting for pods to start ---"
 	@kubectl wait --for=condition=Ready pods --all -n $(NAMESPACE) --timeout=120s 2>/dev/null || true

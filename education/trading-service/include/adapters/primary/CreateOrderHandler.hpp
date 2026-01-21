@@ -88,8 +88,10 @@ namespace trading::adapters::primary
                 }
                 response["timestamp"] = result.timestamp.toString();
 
-                int httpStatus = (result.status == domain::OrderStatus::REJECTED) ? 400 : 201;
-                res.setResult(httpStatus, "application/json", response.dump());
+                // если rejected, то возвращаем статус 400 и прерываем обработку цепочки middleware
+                int httpStatus = (result.status == domain::OrderStatus::REJECTED) ? 400 : 0;
+                res.setResult(httpStatus, "application/json", response.dump()); // статус 0, чтоб не прервать цепочку middleware
+                req.setAttribute("httpStatus", std::to_string(201)); //TODO: специфичное решение, подумать как лучше сделать
             }
             catch (const nlohmann::json::exception &e)
             {

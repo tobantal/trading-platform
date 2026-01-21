@@ -52,7 +52,8 @@ namespace trading::adapters::primary
                     nlohmann::json response;
                     response["message"] = "Order cancelled";
                     response["order_id"] = orderId;
-                    res.setResult(200, "application/json", response.dump());
+                    res.setResult(0, "application/json", response.dump()); // статус 0, чтоб не прервать цепочку middleware
+                    req.setAttribute("httpStatus", std::to_string(200)); //TODO: специфичное решение, подумать как лучше сделать
                 }
                 else
                 {

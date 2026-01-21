@@ -95,7 +95,7 @@ protected:
 // ТЕСТЫ: POST /api/v1/orders
 // ============================================================================
 
-TEST_F(CreateOrderHandlerTest, ValidMarketOrder_Returns201)
+TEST_F(CreateOrderHandlerTest, ValidMarketOrder_Returns0)
 {
     EXPECT_CALL(*mockOrderService_, placeOrder(_))
         .WillOnce(Return(createSuccessResult("ord-12345")));
@@ -112,14 +112,15 @@ TEST_F(CreateOrderHandlerTest, ValidMarketOrder_Returns201)
 
     handler_->handle(req, res);
 
-    EXPECT_EQ(res.getStatus(), 201);
+    EXPECT_EQ(res.getStatus(), 0);
+    EXPECT_EQ(req.getAttribute("httpStatus"), "201");
 
     auto json = parseJson(res.getBody());
     EXPECT_EQ(json["order_id"], "ord-12345");
     EXPECT_EQ(json["status"], "PENDING");
 }
 
-TEST_F(CreateOrderHandlerTest, ValidLimitOrder_Returns201)
+TEST_F(CreateOrderHandlerTest, ValidLimitOrder_Returns0)
 {
     EXPECT_CALL(*mockOrderService_, placeOrder(_))
         .WillOnce(Return(createSuccessResult("ord-12345")));
@@ -138,7 +139,8 @@ TEST_F(CreateOrderHandlerTest, ValidLimitOrder_Returns201)
 
     handler_->handle(req, res);
 
-    EXPECT_EQ(res.getStatus(), 201);
+    EXPECT_EQ(res.getStatus(), 0);
+    EXPECT_EQ(req.getAttribute("httpStatus"), "201");
 }
 
 TEST_F(CreateOrderHandlerTest, NoAccountId_Returns500)

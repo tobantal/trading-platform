@@ -35,6 +35,7 @@ namespace serverlib
             // Инкрементируем ДО обработки (считаем входящие запросы)
             metrics_->increment("http_requests_total", {{"method", req.getMethod()},
                                                         {"path", req.getPathPattern()}});
+            res.setStatus(0);
         }
 
     private:

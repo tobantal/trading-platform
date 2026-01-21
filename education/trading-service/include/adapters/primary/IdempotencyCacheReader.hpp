@@ -27,7 +27,11 @@ namespace trading::adapters::primary
                 res.setResult(cached->status, "application/json", cached->body);
                 // status != 0, chain остановится
             }
-            // иначе status == 0, chain продолжится
+            else
+            {
+                // иначе status == 0, chain продолжится
+                res.setStatus(0);
+            }
         }
 
     private:
