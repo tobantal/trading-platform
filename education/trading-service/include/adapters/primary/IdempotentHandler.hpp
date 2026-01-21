@@ -7,6 +7,8 @@
 #include <memory>
 #include <iostream>
 
+//FIXME: deprecated
+// Использовать Middleware-классы вместо.
 namespace trading::adapters::primary
 {
 

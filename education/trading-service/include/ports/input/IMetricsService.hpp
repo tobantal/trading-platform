@@ -3,6 +3,7 @@
 #include <string>
 #include <map>
 
+// TODO: namespace -> serverlib
 namespace trading::ports::input {
 
 /**

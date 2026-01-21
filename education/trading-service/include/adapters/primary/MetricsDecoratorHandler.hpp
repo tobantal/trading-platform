@@ -10,6 +10,8 @@
 #include <iostream>
 #include <regex>
 
+// FIXME: deprecated
+// Использовать MetricsMiddleware вместо.
 namespace trading::adapters::primary
 {
 
