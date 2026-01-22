@@ -8,33 +8,11 @@
 
 ## 📋 Содержание
 
-1. [Критичные доработки библиотеки](#-p0-критичные-доработки-библиотеки-cpp-http-server)
 2. [Архитектурные улучшения](#-p1-архитектурные-улучшения)
 3. [Новый функционал](#-p2-новый-функционал)
 4. [Технический долг](#-технический-долг)
 5. [Рефакторинг](#-рефакторинг)
 
----
-
-## 🔴 P0: Критичные доработки библиотеки cpp-http-server
-
-### 3. Стандартизация обработки path
-
-**Проблема:** Разные handlers по-разному парсят path, постоянные баги.
-
-**Решение:** Добавить в Router встроенную поддержку path parameters:
-
-```cpp
-// Регистрация маршрута с параметрами
-router.get("/api/v1/orders/:id", orderHandler);
-router.delete("/api/v1/orders/:id", cancelHandler);
-
-// В handler:
-void handle(IRequest& req, IResponse& res) override {
-    auto orderId = req.getPathParam("id");  // Автоматически извлечено
-    // ...
-}
-```
 
 ---
 
@@ -211,28 +189,6 @@ struct BacktestResult {
 
 ## 🔧 Рефакторинг
 
-### Handler → Controller организация
-
-**Текущее:** Один handler = один endpoint, много файлов.
-
-**Предложение:**
-```cpp
-// Controller группирует связанные endpoints
-class OrderController {
-public:
-    void createOrder(IRequest& req, IResponse& res);
-    void getOrder(IRequest& req, IResponse& res);
-    void cancelOrder(IRequest& req, IResponse& res);
-    void listOrders(IRequest& req, IResponse& res);
-};
-
-// Router регистрирует методы контроллера
-router.post("/api/v1/orders", &OrderController::createOrder);
-router.get("/api/v1/orders/:id", &OrderController::getOrder);
-router.delete("/api/v1/orders/:id", &OrderController::cancelOrder);
-router.get("/api/v1/orders", &OrderController::listOrders);
-```
-
 ---
 
 ### Разделение hpp/cpp
@@ -280,4 +236,4 @@ router.get("/api/v1/orders", &OrderController::listOrders);
 
 ---
 
-*Последнее обновление: 2026-01-19*
+*Последнее обновление: 2026-01-22*
