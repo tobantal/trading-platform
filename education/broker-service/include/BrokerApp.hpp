@@ -36,7 +36,7 @@
 #include "adapters/secondary/events/RabbitMQAdapter.hpp"
 
 // Primary Adapters
-#include "adapters/primary/HealthHandler.hpp"
+#include "HealthHandler.hpp"
 #include "adapters/primary/MetricsHandler.hpp"
 
 #include "adapters/primary/GetAllInstrumentsHandler.hpp"
@@ -121,7 +121,7 @@ protected:
         rabbitMQAdapter->start();
 
         // HTTP Handlers (только GET!)
-        registerEndpoint("GET", "/health", injector.create<std::shared_ptr<adapters::primary::HealthHandler>>());
+        registerEndpoint("GET", "/health", injector.create<std::shared_ptr<HealthHandler>>());
         registerEndpoint("GET", "/metrics", injector.create<std::shared_ptr<adapters::primary::MetricsHandler>>());
         
         registerEndpoint("GET", "/api/v1/instruments", injector.create<std::shared_ptr<adapters::primary::GetAllInstrumentsHandler>>());

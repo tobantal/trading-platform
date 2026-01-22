@@ -24,7 +24,7 @@
 #include "adapters/secondary/AuthSettings.hpp"
 
 // Primary Adapters
-#include "adapters/primary/HealthHandler.hpp"
+#include "HealthHandler.hpp"
 #include "adapters/primary/MetricsHandler.hpp"
 #include "adapters/primary/RegisterHandler.hpp"
 #include "adapters/primary/LoginHandler.hpp"
@@ -125,7 +125,7 @@ protected:
 
         // Health & Metrics (без зависимостей)
         {
-            auto handler = injector.create<std::shared_ptr<adapters::primary::HealthHandler>>();
+            auto handler = injector.create<std::shared_ptr<HealthHandler>>();
             registerEndpoint("GET", "/health", handler);
             std::cout << "  ✓ HealthHandler: GET /health" << std::endl;
         }

@@ -39,7 +39,7 @@
 #include "adapters/secondary/PostgresIdempotencyRepository.hpp"
 
 // Primary Adapters
-#include "adapters/primary/HealthHandler.hpp"
+#include "HealthHandler.hpp"
 #include "adapters/primary/MetricsHandler.hpp"
 
 #include "adapters/primary/AllEventsListener.hpp"
@@ -144,7 +144,7 @@ namespace trading
                         // Шаг 4: HTTP Handlers
 
                         // Health (с метриками)
-                        auto healthHandler = injector.create<std::shared_ptr<adapters::primary::HealthHandler>>();
+                        auto healthHandler = injector.create<std::shared_ptr<HealthHandler>>();
                         registerEndpoint("GET", "/health",
                                          metricsMiddleware, healthHandler);
 
