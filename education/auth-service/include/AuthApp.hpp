@@ -126,64 +126,64 @@ protected:
         // Health & Metrics (без зависимостей)
         {
             auto handler = injector.create<std::shared_ptr<adapters::primary::HealthHandler>>();
-            handlers_[getHandlerKey("GET", "/health")] = handler;
+            registerEndpoint("GET", "/health", handler);
             std::cout << "  ✓ HealthHandler: GET /health" << std::endl;
         }
 
         {
             auto handler = injector.create<std::shared_ptr<adapters::primary::MetricsHandler>>();
-            handlers_[getHandlerKey("GET", "/metrics")] = handler;
+            registerEndpoint("GET", "/metrics", handler);
             std::cout << "  ✓ MetricsHandler: GET /metrics" << std::endl;
         }
 
         // Auth Handlers
         {
             auto handler = injector.create<std::shared_ptr<adapters::primary::RegisterHandler>>();
-            handlers_[getHandlerKey("POST", "/api/v1/auth/register")] = handler;
+            registerEndpoint("POST", "/api/v1/auth/register", handler);
             std::cout << "  ✓ RegisterHandler: POST /api/v1/auth/register" << std::endl;
         }
 
         {
             auto handler = injector.create<std::shared_ptr<adapters::primary::LoginHandler>>();
-            handlers_[getHandlerKey("POST", "/api/v1/auth/login")] = handler;
+            registerEndpoint("POST", "/api/v1/auth/login", handler);
             std::cout << "  ✓ LoginHandler: POST /api/v1/auth/login" << std::endl;
         }
 
         {
             auto handler = injector.create<std::shared_ptr<adapters::primary::LogoutHandler>>();
-            handlers_[getHandlerKey("POST", "/api/v1/auth/logout")] = handler;
+            registerEndpoint("POST", "/api/v1/auth/logout", handler);
             std::cout << "  ✓ LogoutHandler: POST /api/v1/auth/logout" << std::endl;
         }
 
         {
             auto handler = injector.create<std::shared_ptr<adapters::primary::ValidateTokenHandler>>();
-            handlers_[getHandlerKey("POST", "/api/v1/auth/validate")] = handler;
+            registerEndpoint("POST", "/api/v1/auth/validate", handler);
             std::cout << "  ✓ ValidateTokenHandler: POST /api/v1/auth/validate" << std::endl;
         }
 
         // Access Token Handler
         {
             auto handler = injector.create<std::shared_ptr<adapters::primary::GetAccessTokenHandler>>();
-            handlers_[getHandlerKey("POST", "/api/v1/auth/access-token")] = handler;
+            registerEndpoint("POST", "/api/v1/auth/access-token", handler);
             std::cout << "  ✓ GetAccessTokenHandler: POST /api/v1/auth/access-token" << std::endl;
         }
 
         // Account Handlers
         {
             auto handler = injector.create<std::shared_ptr<adapters::primary::GetAccountsHandler>>();
-            handlers_[getHandlerKey("GET", "/api/v1/accounts")] = handler;
+            registerEndpoint("GET", "/api/v1/accounts", handler);
             std::cout << "  ✓ GetAccountsHandler: GET /api/v1/accounts" << std::endl;
         }
 
         {
             auto handler = injector.create<std::shared_ptr<adapters::primary::AddAccountHandler>>();
-            handlers_[getHandlerKey("POST", "/api/v1/accounts")] = handler;
+            registerEndpoint("POST", "/api/v1/accounts", handler);
             std::cout << "  ✓ AddAccountHandler: POST /api/v1/accounts" << std::endl;
         }
 
         {
             auto handler = injector.create<std::shared_ptr<adapters::primary::DeleteAccountHandler>>();
-            handlers_[getHandlerKey("DELETE", "/api/v1/accounts/*")] = handler;
+            registerEndpoint("DELETE", "/api/v1/accounts/*", handler);
             std::cout << "  ✓ DeleteAccountHandler: DELETE /api/v1/accounts/*" << std::endl;
         }
 

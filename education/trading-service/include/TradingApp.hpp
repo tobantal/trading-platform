@@ -59,7 +59,6 @@
 #include "adapters/primary/CancelOrderHandler.hpp"
 
 // Primary Adapters Middleware
-#include "adapters/primary/ChainHandler.hpp"
 #include "adapters/primary/MetricsMiddleware.hpp"
 #include "adapters/primary/IdempotencyCacheReader.hpp"
 #include "adapters/primary/IdempotencyCacheWriter.hpp"
@@ -91,14 +90,6 @@ namespace trading
                 {
                         BoostBeastApplication::loadEnvironment(argc, argv);
                         std::cout << "[TradingApp] Environment loaded" << std::endl;
-                }
-
-                // TODO: метод потом переместить в библиотеку cpp-http-server-lib
-                template <typename... Handlers>
-                void registerEndpoint(const std::string &method, const std::string &path, Handlers &&...handlers)
-                {
-                        handlers_[getHandlerKey(method, path)] =
-                            std::make_shared<serverlib::ChainHandler>(std::forward<Handlers>(handlers)...);
                 }
 
                 void configureInjection() override

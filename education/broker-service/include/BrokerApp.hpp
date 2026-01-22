@@ -121,20 +121,20 @@ protected:
         rabbitMQAdapter->start();
 
         // HTTP Handlers (только GET!)
-        handlers_[getHandlerKey("GET", "/health")] = injector.create<std::shared_ptr<adapters::primary::HealthHandler>>();
-        handlers_[getHandlerKey("GET", "/metrics")] = injector.create<std::shared_ptr<adapters::primary::MetricsHandler>>();
+        registerEndpoint("GET", "/health", injector.create<std::shared_ptr<adapters::primary::HealthHandler>>());
+        registerEndpoint("GET", "/metrics", injector.create<std::shared_ptr<adapters::primary::MetricsHandler>>());
         
-        handlers_[getHandlerKey("GET", "/api/v1/instruments")] = injector.create<std::shared_ptr<adapters::primary::GetAllInstrumentsHandler>>();
-        handlers_[getHandlerKey("GET", "/api/v1/instruments/*")] = injector.create<std::shared_ptr<adapters::primary::GetInstrumentHandler>>();;
+        registerEndpoint("GET", "/api/v1/instruments", injector.create<std::shared_ptr<adapters::primary::GetAllInstrumentsHandler>>());
+        registerEndpoint("GET", "/api/v1/instruments/*", injector.create<std::shared_ptr<adapters::primary::GetInstrumentHandler>>());
 
-        handlers_[getHandlerKey("GET", "/api/v1/quotes")] = injector.create<std::shared_ptr<adapters::primary::QuotesHandler>>();
+        registerEndpoint("GET", "/api/v1/quotes", injector.create<std::shared_ptr<adapters::primary::QuotesHandler>>());
         
-        handlers_[getHandlerKey("GET", "/api/v1/portfolio")] = injector.create<std::shared_ptr<adapters::primary::GetPortfolioHandler>>();
-        handlers_[getHandlerKey("GET", "/api/v1/portfolio/positions")] = injector.create<std::shared_ptr<adapters::primary::GetPositionsHandler>>();
-        handlers_[getHandlerKey("GET", "/api/v1/portfolio/cash")] = injector.create<std::shared_ptr<adapters::primary::GetCashHandler>>();
+        registerEndpoint("GET", "/api/v1/portfolio", injector.create<std::shared_ptr<adapters::primary::GetPortfolioHandler>>());
+        registerEndpoint("GET", "/api/v1/portfolio/positions", injector.create<std::shared_ptr<adapters::primary::GetPositionsHandler>>());
+        registerEndpoint("GET", "/api/v1/portfolio/cash", injector.create<std::shared_ptr<adapters::primary::GetCashHandler>>());
 
-        handlers_[getHandlerKey("GET", "/api/v1/orders")] = injector.create<std::shared_ptr<adapters::primary::GetOrdersHandler>>();
-        handlers_[getHandlerKey("GET", "/api/v1/orders/*")] = injector.create<std::shared_ptr<adapters::primary::GetOrderHandler>>();
+        registerEndpoint("GET", "/api/v1/orders", injector.create<std::shared_ptr<adapters::primary::GetOrdersHandler>>());
+        registerEndpoint("GET", "/api/v1/orders/*", injector.create<std::shared_ptr<adapters::primary::GetOrderHandler>>());
 
         std::cout << "[BrokerApp] Ready (POST/DELETE via RabbitMQ)" << std::endl;
 

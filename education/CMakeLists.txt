@@ -28,7 +28,7 @@ message(STATUS "Fetching cpp-http-server...")
 FetchContent_Declare(
     cpp-http-server
     GIT_REPOSITORY https://github.com/tobantal/cpp-http-server.git
-    GIT_TAG v0.1.0
+    GIT_TAG v0.2.0
 )
 
 # cpp-cache (LRU cache с TTL)
